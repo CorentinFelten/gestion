@@ -1,0 +1,47 @@
+version: 2
+updates:
+  # ── Backend (NestJS API) ─────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── Frontend (React SPA) ─────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── Docker base images (pinned tags: postgres, caddy, node, nginx) ───────
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+  # docker-compose.yml image pins (postgres, caddy). The docker ecosystem also
+  # parses compose files in the given directory.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  # ── GitHub Actions used in CI ─────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
