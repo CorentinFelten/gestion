@@ -76,6 +76,10 @@ export const fr = {
     notFoundTitle: 'Page introuvable',
     notFoundBody: 'Cette page n’existe pas ou a été déplacée.',
     backHome: 'Retour au tableau de bord',
+    // App-level crash fallback (ErrorBoundary)
+    crashTitle: 'Une erreur inattendue est survenue',
+    crashBody: 'L’application a rencontré un problème. Rechargez la page pour continuer.',
+    reload: 'Recharger la page',
   },
 
   // ── auth: login / register / session ───────────────────────────────────────
@@ -206,6 +210,7 @@ export const fr = {
     splitWaysOne: '{{count}} part',
     splitWaysOther: '{{count}} parts',
     confirmDelete: 'Supprimer « {{description}} » ?',
+    deleteError: 'Impossible de supprimer la transaction. Veuillez réessayer.',
     // Modal
     modalAdd: 'Ajouter une transaction',
     modalEdit: 'Modifier la transaction',
@@ -499,6 +504,8 @@ export const fr = {
     currentBalance: 'Solde actuel',
     ledgerLoading: 'Chargement du relevé…',
     deleteConfirm: 'Supprimer cette transaction ? Cette action est irréversible.',
+    deleteError: 'Impossible de supprimer la transaction. Veuillez réessayer.',
+    archiveError: 'Impossible de mettre à jour le compte. Veuillez réessayer.',
     addToAccount: 'Ajouter une transaction à ce compte',
     shownCountOne: '{{count}} compte affiché',
     shownCountOther: '{{count}} comptes affichés',

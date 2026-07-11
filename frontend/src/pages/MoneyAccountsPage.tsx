@@ -91,6 +91,10 @@ export default function MoneyAccountsPage() {
         />
       ) : null}
 
+      {updateAccount.isError ? (
+        <p className="mb-4 text-sm text-rose-600 dark:text-rose-400">{t('accounts.archiveError')}</p>
+      ) : null}
+
       {accounts.isLoading ? (
         <LoadingBlock label={t('accounts.loading')} />
       ) : accounts.isError ? (
@@ -236,6 +240,10 @@ function SelectedLedger({
           )}
         </div>
       </div>
+
+      {del.isError ? (
+        <p className="mb-3 text-sm text-rose-600 dark:text-rose-400">{t('accounts.deleteError')}</p>
+      ) : null}
 
       {txs.isLoading ? (
         <LoadingBlock label={t('accounts.ledgerLoading')} />
