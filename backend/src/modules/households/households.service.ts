@@ -91,6 +91,25 @@ export class HouseholdsService {
     const currencyChanged =
       dto.baseCurrency !== undefined && dto.baseCurrency !== household.baseCurrency;
 
+    // A base-currency change is only safe on an empty ledger. Once any
+    // transaction or settlement exists, its `amount_base` is frozen against the
+    // OLD base (the FX-freeze rule, PLAN.md §3.2) and is never re-derived, so a
+    // new base would leave history denominated in the prior base while new rows
+    // freeze against the new one, and TallyService would sum incompatible
+    // bases. Reject rather than silently corrupt the ledger.
+    if (currencyChanged) {
+      const [txnCount, settlementCount] = await Promise.all([
+        this.prisma.transaction.count({ where: { householdId } }),
+        this.prisma.settlement.count({ where: { householdId } }),
+      ]);
+      if (txnCount > 0 || settlementCount > 0) {
+        throw new ConflictException(
+          'Cannot change the base currency once transactions or settlements exist: ' +
+            'historical amounts are frozen against the original base and are never re-converted.',
+        );
+      }
+    }
+
     const updated = await this.prisma.household.update({
       where: { id: householdId },
       data: {
