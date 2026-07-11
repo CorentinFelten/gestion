@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Decimal from 'decimal.js';
 import { useAuth } from '@/context/AuthContext';
 import {
   useRequireAuth,
@@ -22,7 +23,6 @@ import {
   PageHeader,
   StateBlock,
 } from '@/components/household/ui';
-import { toNumber } from '@/components/household/format';
 import { useT, useFormat, categoryLabel } from '@/i18n';
 
 export default function SettleUpPage() {
@@ -51,19 +51,20 @@ export default function SettleUpPage() {
       {
         fromUserId: string;
         toUserId: string;
-        total: number;
+        total: Decimal;
         rows: { categoryId: string | null; categoryName: string; amountBase: string }[];
       }
     >();
     for (const e of settleUp.data?.entries ?? []) {
       const key = `${e.fromUserId}→${e.toUserId}`;
       const g =
-        map.get(key) ?? { fromUserId: e.fromUserId, toUserId: e.toUserId, total: 0, rows: [] };
-      g.total += toNumber(e.amountBase);
+        map.get(key) ??
+        { fromUserId: e.fromUserId, toUserId: e.toUserId, total: new Decimal(0), rows: [] };
+      g.total = g.total.plus(e.amountBase);
       g.rows.push({ categoryId: e.categoryId, categoryName: e.categoryName, amountBase: e.amountBase });
       map.set(key, g);
     }
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+    return Array.from(map.values()).sort((a, b) => b.total.comparedTo(a.total));
   }, [settleUp.data]);
 
   if (!ready || household.isLoading) return <StateBlock state="loading" />;
@@ -136,7 +137,7 @@ export default function SettleUpPage() {
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <Eyebrow>{t('settleUp.owes')}</Eyebrow>
-                    <Money value={g.total} currency={base} tone="debit" className="font-bold" />
+                    <Money value={g.total.toString()} currency={base} tone="debit" className="font-bold" />
                   </div>
                   {g.rows.length === 1 ? (
                     <Button

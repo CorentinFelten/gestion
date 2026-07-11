@@ -5,7 +5,7 @@ import { useRegister } from '@/hooks/useAuthActions';
 import { AuthShell } from '@/components/household/AuthShell';
 import { Button, Field, Input, Select, Banner } from '@/components/household/ui';
 import { isApiError } from '@/lib/api';
-import { useT } from '@/i18n';
+import { useT, normalizeLocale } from '@/i18n';
 import { usePinnedCurrencyOptions } from '@/hooks/usePinnedCurrencies';
 
 export default function RegisterPage() {
@@ -40,7 +40,7 @@ export default function RegisterPage() {
       email,
       password,
       preferredCurrency,
-      locale: navigator.language,
+      locale: normalizeLocale(navigator.language),
     });
   }
 

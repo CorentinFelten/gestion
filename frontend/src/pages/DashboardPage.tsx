@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import Decimal from 'decimal.js';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, Cell, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { useAuth } from '@/context/AuthContext';
@@ -35,8 +36,11 @@ import { useT, useFormat, categoryLabel } from '@/i18n';
 import { usePinnedCurrencyOptions } from '@/hooks/usePinnedCurrencies';
 
 function monthStart(): string {
+  // Local first-of-month; built from local components (not toISOString, which is
+  // UTC and can roll into the previous month in negative-offset locales).
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-01`;
 }
 
 export default function DashboardPage() {
@@ -77,22 +81,30 @@ export default function DashboardPage() {
   }, [tally.data]);
 
   const overall = toNumber(tally.data?.overall);
-  const owed = positions.filter((p) => p.net > 0).reduce((s, p) => s + p.net, 0);
-  const owe = positions.filter((p) => p.net < 0).reduce((s, p) => s - p.net, 0);
+  const owed = positions
+    .filter((p) => p.net > 0)
+    .reduce((sum, p) => sum.plus(p.net), new Decimal(0))
+    .toString();
+  const owe = positions
+    .filter((p) => p.net < 0)
+    .reduce((sum, p) => sum.minus(p.net), new Decimal(0))
+    .toString();
   const maxPos = Math.max(0.01, ...positions.map((p) => Math.abs(p.net)));
 
   const monthByCategory = useMemo(() => {
-    const by: Record<string, number> = {};
+    const by: Record<string, Decimal> = {};
     for (const tx of monthly.data ?? []) {
       const key = tx.categoryId ? catName[tx.categoryId] ?? uncategorisedLabel : uncategorisedLabel;
-      by[key] = (by[key] ?? 0) + toNumber(tx.amountBase);
+      by[key] = (by[key] ?? new Decimal(0)).plus(tx.amountBase);
     }
     return Object.entries(by)
-      .map(([label, value]) => ({ label, value }))
+      .map(([label, value]) => ({ label, value: value.toNumber() }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 7);
   }, [monthly.data, catName, uncategorisedLabel]);
-  const monthTotal = monthByCategory.reduce((s, r) => s + r.value, 0);
+  const monthTotal = monthByCategory
+    .reduce((sum, r) => sum.plus(r.value), new Decimal(0))
+    .toString();
 
   if (!ready || household.isLoading) {
     return <StateBlock state="loading" />;

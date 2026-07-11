@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import Decimal from 'decimal.js';
 import { useAuth } from '@/context/AuthContext';
 import { useFormat, useT } from '@/i18n';
 import { useNetWorth } from '@/hooks/useNetWorth';
@@ -123,9 +124,9 @@ export default function MoneyOverviewPage() {
             </SummaryTile>
             <SummaryTile label={t('money.netThisMonth')}>
               <MoneyAmount
-                value={String(
-                  Number(summary.data.income || 0) - Number(summary.data.spending || 0),
-                )}
+                value={new Decimal(summary.data.income || 0)
+                  .minus(summary.data.spending || 0)
+                  .toString()}
                 currency={summary.data.profileCurrency}
                 size="xl"
                 signed

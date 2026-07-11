@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Decimal from 'decimal.js';
 import {
   Bar,
   BarChart,
@@ -64,7 +65,8 @@ export default function ReportsPage() {
       );
   }, [report.data, group, memberMap, f]);
 
-  const total = rows.reduce((s, r) => s + r.value, 0);
+  const totalDec = rows.reduce((sum, r) => sum.plus(r.value), new Decimal(0));
+  const total = totalDec.toNumber();
   const isTimeSeries = group === 'month';
 
   const countLabel = plural(rows.length, {
@@ -104,7 +106,7 @@ export default function ReportsPage() {
         <div>
           <Eyebrow>{t('reports.totalSpend')}</Eyebrow>
           <p className="mt-1 font-mono text-3xl font-extrabold tracking-tight tnum">
-            {f.money(total, base)}
+            {f.money(totalDec.toString(), base)}
           </p>
         </div>
         <p className="text-sm text-gray-500">
@@ -216,7 +218,7 @@ export default function ReportsPage() {
                         />
                       </div>
                       <span className="w-9 shrink-0 text-right font-mono text-[0.7rem] tnum text-gray-400">
-                        {pct.toFixed(0)}%
+                        {f.percent(pct, { alreadyPercent: true, fractionDigits: 0 })}
                       </span>
                     </div>
                   </li>

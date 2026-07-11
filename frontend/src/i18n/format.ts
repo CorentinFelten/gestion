@@ -131,13 +131,31 @@ export function formatPercent(
   }
 }
 
+/** Matches a date-only ISO string (`YYYY-MM-DD`, no time component). */
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Coerce a value to a Date. A date-only ISO string (`2026-07-11`) is parsed in
+ * the LOCAL timezone, not UTC: `new Date('2026-07-11')` is UTC midnight, which
+ * renders as the previous day in negative-offset locales (e.g. fr-CA). Datetime
+ * strings (with a time component) and numbers keep native parsing.
+ */
+function toDate(value: string | number | Date): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    const m = DATE_ONLY_RE.exec(value);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  return new Date(value);
+}
+
 /** Date only: fr-FR → `11/07/2026`, fr-CA → `2026-07-11`. */
 export function formatDate(
   value: string | number | Date | null | undefined,
   locale: Locale | string = DEFAULT_LOCALE,
 ): string {
   if (value === null || value === undefined || value === '') return '-';
-  const d = value instanceof Date ? value : new Date(value);
+  const d = toDate(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return new Intl.DateTimeFormat(locale, {
     year: 'numeric',
@@ -152,7 +170,7 @@ export function formatDateTime(
   locale: Locale | string = DEFAULT_LOCALE,
 ): string {
   if (value === null || value === undefined || value === '') return '-';
-  const d = value instanceof Date ? value : new Date(value);
+  const d = toDate(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return new Intl.DateTimeFormat(locale, {
     year: 'numeric',

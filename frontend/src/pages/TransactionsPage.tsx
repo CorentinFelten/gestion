@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import Decimal from 'decimal.js';
 import { useAuth } from '@/context/AuthContext';
 import {
   useRequireAuth,
@@ -16,6 +17,7 @@ import {
 import { TransactionModal } from '@/components/household/TransactionModal';
 import {
   Avatar,
+  Banner,
   Button,
   Card,
   CurrencyBadge,
@@ -65,7 +67,9 @@ export default function TransactionsPage() {
   }, [list.data]);
 
   const hasFilters = Object.values(filters).some(Boolean);
-  const total = (list.data ?? []).reduce((s, t) => s + Number(t.amountBase), 0);
+  const total = (list.data ?? [])
+    .reduce((sum, t) => sum.plus(t.amountBase), new Decimal(0))
+    .toString();
 
   function openAdd() {
     setEditing(null);
@@ -151,6 +155,12 @@ export default function TransactionsPage() {
           ) : null}
         </div>
       </Card>
+
+      {del.isError ? (
+        <div className="mb-5">
+          <Banner tone="error">{t('transactions.deleteError')}</Banner>
+        </div>
+      ) : null}
 
       {/* List */}
       <Card>

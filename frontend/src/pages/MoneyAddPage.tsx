@@ -6,6 +6,7 @@ import {
   categoryLabel,
   personalTxTypeLabel,
   CURRENCIES,
+  isoToday,
   useFormat,
   useT,
 } from '@/i18n';
@@ -36,7 +37,7 @@ import {
 } from '@/components/money/ui';
 import type { CreatePersonalTransactionInput, PersonalTxnType } from '@/types';
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = isoToday();
 
 export default function MoneyAddPage() {
   const { t } = useT();

@@ -206,7 +206,7 @@ export function TransactionModal({
               ) : baseEquiv !== null && fx.data ? (
                 <span>
                   ≈ <span className="font-mono tnum">{f.money(baseEquiv, baseCurrency)}</span>{' '}
-                  <CurrencyBadge code={baseCurrency} /> @ {fx.data.rate} ({fx.data.rateDate})
+                  <CurrencyBadge code={baseCurrency} /> @ {fx.data.rate} ({f.date(fx.data.rateDate)})
                 </span>
               ) : null}
             </div>
