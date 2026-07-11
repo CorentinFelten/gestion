@@ -5,6 +5,7 @@
  */
 import {
   useEffect,
+  useRef,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -403,16 +404,58 @@ export function Modal({
   wide?: boolean;
 }) {
   const { t } = useT();
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Escape to close + lock body scroll + trap focus inside the dialog, moving
+  // focus in on open and restoring it to the previously focused element on close
+  // (mirrors the mobile drawer in Layout.tsx).
   useEffect(() => {
     if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const node = dialogRef.current;
+
+    const focusables = (): HTMLElement[] =>
+      node
+        ? Array.from(
+            node.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => el.offsetParent !== null)
+        : [];
+
+    // Move initial focus into the dialog.
+    (focusables()[0] ?? node)?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const items = focusables();
+        if (items.length === 0) {
+          e.preventDefault();
+          node?.focus();
+          return;
+        }
+        const active = document.activeElement as HTMLElement | null;
+        const idx = active ? items.indexOf(active) : -1;
+        if (e.shiftKey && idx <= 0) {
+          e.preventDefault();
+          items[items.length - 1].focus();
+        } else if (!e.shiftKey && idx === items.length - 1) {
+          e.preventDefault();
+          items[0].focus();
+        }
+      }
     };
+
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
+      previouslyFocused?.focus?.();
     };
   }, [open, onClose]);
 
@@ -421,10 +464,12 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-gray-900/50 backdrop-blur-sm sm:items-start sm:p-6 md:p-8">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-[#141A24] sm:my-4 sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${
+        className={`relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-800 dark:bg-[#141A24] sm:my-4 sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${
           wide ? 'sm:max-w-2xl' : 'sm:max-w-lg'
         }`}
       >
