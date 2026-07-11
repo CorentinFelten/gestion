@@ -1,19 +1,34 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useT } from '@/i18n';
 import Layout from '@/components/Layout';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
-import DashboardPage from '@/pages/DashboardPage';
 import TransactionsPage from '@/pages/TransactionsPage';
 import TallyPage from '@/pages/TallyPage';
 import SettleUpPage from '@/pages/SettleUpPage';
-import ReportsPage from '@/pages/ReportsPage';
 import MoneyOverviewPage from '@/pages/MoneyOverviewPage';
 import MoneyAccountsPage from '@/pages/MoneyAccountsPage';
 import MoneyAddPage from '@/pages/MoneyAddPage';
-import MoneyStatsPage from '@/pages/MoneyStatsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
+
+// Chart-heavy pages are code-split so the ~500 kB recharts chunk stays out of the
+// initial bundle (incl. /login) and only loads when one of these routes renders.
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
+const MoneyStatsPage = lazy(() => import('@/pages/MoneyStatsPage'));
+
+/** Localized spinner shown while a lazy route chunk loads. */
+function RouteFallback() {
+  const { t } = useT();
+  return (
+    <div className="grid min-h-[40vh] place-items-center text-sm text-gray-400" role="status">
+      {t('common.loading')}
+    </div>
+  );
+}
 
 /**
  * Guard for the authenticated app shell: while the session is still loading we
@@ -35,28 +50,30 @@ function RequireAuth() {
  */
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
 
-      <Route element={<RequireAuth />}>
-        <Route element={<Layout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
-          <Route path="/tally" element={<TallyPage />} />
-          <Route path="/settle-up" element={<SettleUpPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
+        <Route element={<RequireAuth />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path="/tally" element={<TallyPage />} />
+            <Route path="/settle-up" element={<SettleUpPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
 
-          <Route path="/money" element={<MoneyOverviewPage />} />
-          <Route path="/money/accounts" element={<MoneyAccountsPage />} />
-          <Route path="/money/add" element={<MoneyAddPage />} />
-          <Route path="/money/stats" element={<MoneyStatsPage />} />
+            <Route path="/money" element={<MoneyOverviewPage />} />
+            <Route path="/money/accounts" element={<MoneyAccountsPage />} />
+            <Route path="/money/add" element={<MoneyAddPage />} />
+            <Route path="/money/stats" element={<MoneyStatsPage />} />
 
-          <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
   );
 }

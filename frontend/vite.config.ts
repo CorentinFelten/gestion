@@ -10,6 +10,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the heavy charting library into its own chunk so it can be
+        // loaded on demand by the lazy chart pages rather than up front.
+        manualChunks: {
+          recharts: ['recharts'],
+        },
+      },
+    },
+  },
   server: {
     host: true,
     port: 5173,
