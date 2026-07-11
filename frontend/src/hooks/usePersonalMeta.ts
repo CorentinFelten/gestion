@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Category, FxRate, Household, Transaction } from '@/types';
+import { useFxPreview } from '@/hooks/useTransactions';
+import type { Category, Household, Transaction } from '@/types';
+
+/**
+ * Live FX preview for foreign-currency entry (PLAN §3.1). Re-exported from the
+ * shared-ledger hook so the personal and household ledgers share one `/fx/rate`
+ * cache key (`['fx','rate',from,to,date]`) instead of double-fetching.
+ */
+export const useFxRate = useFxPreview;
 
 /**
  * Supporting lookups for the Add-transaction form. Each is best-effort: the
@@ -25,23 +33,6 @@ export function usePersonalCategories() {
   });
 }
 
-/** Live FX preview for foreign-currency entry (PLAN §3.1, debug/preview route). */
-export function useFxRate(from: string, to: string, date: string) {
-  const enabled = !!from && !!to && !!date && from !== to;
-  return useQuery({
-    queryKey: ['fx', 'rate', from, to, date],
-    enabled,
-    retry: false,
-    staleTime: 60 * 60_000,
-    queryFn: async () => {
-      const { data } = await api.get<FxRate>('/fx/rate', {
-        params: { from, to, date },
-      });
-      return data;
-    },
-  });
-}
-
 /**
  * Recent shared expenses the user could link a personal transaction to.
  * Resolves the single household (§12 single-household simplification) then its
@@ -55,7 +46,12 @@ export function useLinkableSharedTransactions(enabled: boolean) {
     staleTime: 60_000,
     queryFn: async () => {
       try {
-        const { data: household } = await api.get<Household>('/household');
+        // Single-household v1: `GET /households` returns an array; take the first
+        // (mirrors useHousehold). The singular `/household` route does not exist,
+        // so this list previously came back empty.
+        const { data: households } = await api.get<Household[]>('/households');
+        const household = households[0];
+        if (!household) return [] as Transaction[];
         const { data } = await api.get<Transaction[]>(
           `/households/${household.id}/transactions`,
         );

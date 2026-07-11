@@ -91,13 +91,17 @@ export function useDeleteTransaction(householdId: string | undefined) {
 /**
  * Live FX preview: rate to convert `from`→`to` on `date`. Disabled when the two
  * currencies match. Returns the frozen-style snapshot the server would store.
+ *
+ * This is the single shared FX-rate hook for the whole app (the personal ledger
+ * re-exports it as `useFxRate`) so both call sites hit the same `/fx/rate`
+ * endpoint under one cache key and never double-fetch.
  */
 export function useFxPreview(from: string, to: string, date: string) {
   return useQuery({
-    queryKey: ['fx', from, to, date],
+    queryKey: ['fx', 'rate', from, to, date],
     enabled: !!from && !!to && !!date && from !== to,
     staleTime: 1000 * 60 * 60,
-    retry: 0,
+    retry: false,
     queryFn: async () => {
       const { data } = await api.get<FxRate>('/fx/rate', { params: { from, to, date } });
       return data;
