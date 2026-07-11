@@ -5,9 +5,26 @@ per-category, multi-currency with frozen historical FX), plus a private personal
 finance ledger (accounts, income/expense/transfer, net worth). See
 [`PLAN.md`](./PLAN.md) for the full product spec.
 
-> **Status: Phase 0 skeleton.** The monorepo, shared contracts, Docker stack, and
-> tooling are in place. Feature modules are typed **stubs** that throw
-> `NOT_IMPLEMENTED`, feature agents fill the bodies without touching contracts.
+> **Status: shipped & tested.** All feature modules are fully implemented, no
+> `NOT_IMPLEMENTED` stubs remain. The backend passes its full Jest suite (~127
+> tests across auth, FX, transactions, settlements, tally, personal, categories,
+> users, households/invites, and shared guards); the frontend builds clean
+> (`tsc -b && vite build`); and end-to-end smoke tests drive real flows through
+> `/api/v1` (multi-currency split with frozen FX, pairwise tally + reset
+> settlement, personal ledger + net worth). What's shipped:
+>
+> - **Shared ledger** — household expenses with `equal|exact|percent|shares`
+>   splits (largest-remainder), multi-currency with FX **frozen to the payment
+>   date**, receipt uploads, audit log.
+> - **Reimbursement engine** — directed, pairwise, per-category tally with
+>   category-scoped settlements and full-reset (`is_full_reset`).
+> - **Personal ledger** (`/me/*`) — private accounts (per-country FR/CA),
+>   income/expense/transfer, net worth and statistics at the latest rate.
+> - **Auth & security** — argon2id, opaque server-side sessions, CSRF
+>   double-submit, guard stack, rate limiting (see [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md)).
+> - **French UI** — locale-aware (fr-FR / fr-CA) via a typed i18n dictionary.
+> - **Ops** — Docker Compose stack (Caddy TLS, nightly verified pg_dump backups),
+>   bind-mounted `./data`, pinned image tags, CI on push/PR.
 
 ## Stack
 
@@ -92,7 +109,7 @@ npm run dev                        # http://localhost:5173  (proxies /api → :3
 | `npm run start:dev` | Watch-mode dev server |
 | `npm run prisma:generate` | Regenerate the Prisma client |
 | `npm run prisma:migrate:dev` | Create a new migration (needs a running DB) |
-| `npm run seed` | Seed demo data (skeleton) |
+| `npm run seed` | Seed idempotent demo data (household, users, categories, mixed-currency expenses, settlement, personal accounts) |
 | `npm test` | Jest unit tests |
 
 ## Contracts feature agents must use
