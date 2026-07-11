@@ -243,12 +243,16 @@ export function TransactionModal({
           <Field label={t('common.category')} htmlFor="tx-category">
             <Select id="tx-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">{t('common.uncategorised')}</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.icon ? `${c.icon} ` : ''}
-                  {categoryLabel(c.name)}
-                </option>
-              ))}
+              {categories
+                // Shared transactions are expenses: hide income-only custom
+                // categories, but keep whatever is currently selected.
+                .filter((c) => c.flow !== 'income' || c.id === categoryId)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.icon ? `${c.icon} ` : ''}
+                    {categoryLabel(c.name)}
+                  </option>
+                ))}
             </Select>
           </Field>
         </div>

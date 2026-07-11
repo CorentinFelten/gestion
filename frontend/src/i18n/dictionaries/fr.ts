@@ -386,6 +386,31 @@ export const fr = {
     inviteError: 'Impossible de créer l’invitation.',
     pendingInvites: 'Invitations en attente',
     revokeInvite: 'Révoquer',
+    // Custom categories (shared household + private personal)
+    householdCategories: 'Catégories du foyer',
+    householdCategoriesHint:
+      'Les catégories de dépenses et de revenus partagées par le foyer. Tous les membres peuvent en ajouter.',
+    personalCategories: 'Catégories personnelles',
+    personalCategoriesHint:
+      'Vos catégories privées, visibles de vous seul, pour votre argent personnel.',
+    categoryName: 'Nom',
+    categoryNamePlaceholder: 'Ex. Animaux, Loisirs…',
+    categoryFlow: 'Type',
+    categoryFlowExpense: 'Dépense',
+    categoryFlowIncome: 'Revenu',
+    categoryIcon: 'Icône',
+    categoryIconPlaceholder: '🐾',
+    categoryColor: 'Couleur',
+    addCategory: 'Ajouter',
+    addingCategory: 'Ajout…',
+    categoryDefaultBadge: 'Par défaut',
+    deleteCategory: 'Supprimer {{name}}',
+    deleteCategoryConfirm: 'Supprimer la catégorie « {{name}} » ?',
+    categoryCreateError:
+      'Impossible d’ajouter la catégorie. Ce nom existe peut-être déjà.',
+    categoryDeleteError:
+      'Impossible de supprimer cette catégorie. Elle est peut-être utilisée par des opérations.',
+    categoriesEmpty: 'Aucune catégorie personnalisée pour l’instant.',
   },
 
   // ── money: personal-finance ("My Money") area ──────────────────────────────

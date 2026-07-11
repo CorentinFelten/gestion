@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Category, CategoryFlow, CategoryScope, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_PERSONAL_CATEGORIES, DEFAULT_SHARED_CATEGORIES } from './categories.constants';
+import type { CreateCategoryDto } from './categories.schemas';
 
 /** Wire-shape mirrors the frontend `Category` type (src/types/index.ts). */
 export interface CategoryDto {
@@ -78,6 +79,99 @@ export class CategoriesService {
       orderBy: { createdAt: 'asc' },
     });
     return rows.map((r) => this.toDto(r));
+  }
+
+  // ── Custom categories (create / delete) ─────────────────────────────────────
+  //
+  // Users may add their own categories in two scopes: household SHARED buckets
+  // (any member, matches the household-settings policy) and PERSONAL buckets
+  // (owner-only). Global default categories (household=null & user=null) are
+  // never mutable through these paths — a delete only ever targets a row owned by
+  // the caller's household / user, so one owner can't touch another's or a
+  // global default.
+
+  /** Create a custom SHARED category on a household (member-gated at the controller). */
+  async createHouseholdCategory(householdId: string, dto: CreateCategoryDto): Promise<CategoryDto> {
+    await this.assertNameFree({ householdId }, dto.flow, dto.name);
+    const created = await this.prisma.category.create({
+      data: {
+        householdId,
+        userId: null,
+        scope: 'shared',
+        flow: dto.flow,
+        name: dto.name,
+        icon: dto.icon ?? null,
+        color: dto.color ?? null,
+      },
+    });
+    return this.toDto(created);
+  }
+
+  /** Create a custom PERSONAL category for a user (owner-only). */
+  async createPersonalCategory(userId: string, dto: CreateCategoryDto): Promise<CategoryDto> {
+    await this.assertNameFree({ userId }, dto.flow, dto.name);
+    const created = await this.prisma.category.create({
+      data: {
+        householdId: null,
+        userId,
+        scope: 'personal',
+        flow: dto.flow,
+        name: dto.name,
+        icon: dto.icon ?? null,
+        color: dto.color ?? null,
+      },
+    });
+    return this.toDto(created);
+  }
+
+  /** Delete a household's own custom category (never a global default). */
+  async deleteHouseholdCategory(householdId: string, categoryId: string): Promise<void> {
+    const category = await this.prisma.category.findFirst({
+      where: { id: categoryId, householdId },
+    });
+    if (!category) throw new NotFoundException('Category not found');
+    await this.deleteIfUnused(categoryId);
+  }
+
+  /** Delete a user's own custom personal category (never a global default). */
+  async deletePersonalCategory(userId: string, categoryId: string): Promise<void> {
+    const category = await this.prisma.category.findFirst({
+      where: { id: categoryId, userId },
+    });
+    if (!category) throw new NotFoundException('Category not found');
+    await this.deleteIfUnused(categoryId);
+  }
+
+  /**
+   * Reject a duplicate name (case-insensitive) within the same owner + flow so a
+   * user can't create two indistinguishable buckets.
+   */
+  private async assertNameFree(
+    owner: { householdId: string } | { userId: string },
+    flow: CategoryFlow,
+    name: string,
+  ): Promise<void> {
+    const clash = await this.prisma.category.findFirst({
+      where: { ...owner, flow, name: { equals: name, mode: 'insensitive' } },
+    });
+    if (clash) throw new ConflictException('A category with this name already exists');
+  }
+
+  /**
+   * Delete a category only if nothing references it. The ledger is append-only
+   * and the tally is computed per-category, so removing an in-use category would
+   * orphan history; block it and let the caller keep the bucket instead.
+   */
+  private async deleteIfUnused(categoryId: string): Promise<void> {
+    const [txns, settlements, personalTxns] = await Promise.all([
+      this.prisma.transaction.count({ where: { categoryId } }),
+      this.prisma.settlement.count({ where: { categoryId } }),
+      this.prisma.personalTransaction.count({ where: { categoryId } }),
+    ]);
+    if (txns + settlements + personalTxns > 0) {
+      throw new ConflictException('Category is in use and cannot be deleted');
+    }
+    await this.prisma.category.delete({ where: { id: categoryId } });
   }
 
   /**
