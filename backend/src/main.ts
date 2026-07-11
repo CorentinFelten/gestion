@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -42,7 +43,16 @@ async function bootstrap(): Promise<void> {
   }
   const corsOrigin = appUrl ?? 'http://localhost:5173';
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: false,
+  });
+
+  // Caddy fronts /api as a single reverse proxy. Trust exactly one proxy hop so
+  // Express derives `req.ip` and `req.protocol` from `X-Forwarded-For` /
+  // `X-Forwarded-Proto` instead of the proxy's own socket address. Without this
+  // the ThrottlerGuard buckets every client under the proxy IP (one shared rate
+  // limit) and Session.ip audits the proxy rather than the real client.
+  app.set('trust proxy', 1);
 
   // Security headers.
   app.use(helmet());
