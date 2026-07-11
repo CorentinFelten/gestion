@@ -18,6 +18,7 @@ import { PersonalService } from './personal.service';
 import {
   CreateAccountSchema,
   CreatePersonalTransactionSchema,
+  PersonalTransactionFilterSchema,
   UpdateAccountSchema,
   UpdatePersonalTransactionSchema,
 } from './personal.schemas';
@@ -75,7 +76,7 @@ export class PersonalController {
   @Get('transactions')
   listTransactions(
     @CurrentUser('id') userId: string,
-    @Query() filter: PersonalTransactionFilter,
+    @Query(new ZodValidationPipe(PersonalTransactionFilterSchema)) filter: PersonalTransactionFilter,
   ) {
     return this.personal.listTransactions(userId, filter);
   }

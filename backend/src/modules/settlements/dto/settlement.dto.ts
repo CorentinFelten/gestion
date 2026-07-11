@@ -45,10 +45,13 @@ export interface SettlementDto {
   directionWarning?: boolean;
 }
 
-export interface SettlementFilter {
-  categoryId?: string;
-  memberId?: string;
-}
+/** Query-string validation for the settlements list endpoint. */
+export const SettlementFilterSchema = z.object({
+  categoryId: z.string().min(1).optional(),
+  memberId: z.string().min(1).optional(),
+});
+
+export type SettlementFilter = z.infer<typeof SettlementFilterSchema>;
 
 /** Prefill payload for the "Reset tally" one-click (exact outstanding). */
 export interface SettleUpPrefillDto {

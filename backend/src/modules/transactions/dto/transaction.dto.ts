@@ -74,14 +74,21 @@ export interface TransactionDto {
   updatedAt: string;
 }
 
-export interface TransactionFilter {
-  from?: string; // date range start (ISO)
-  to?: string; // date range end (ISO)
-  memberId?: string;
-  categoryId?: string;
-  currency?: string;
-  search?: string;
-}
+/**
+ * Query-string validation for the list endpoint. Optional ISO dates, currency
+ * codes and free-text are validated at the boundary so a malformed `?from=abc`
+ * yields a 400 instead of reaching Prisma (Invalid Date) and surfacing as a 500.
+ */
+export const TransactionFilterSchema = z.object({
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  memberId: z.string().min(1).optional(),
+  categoryId: z.string().min(1).optional(),
+  currency: currencyCode.optional(),
+  search: z.string().optional(),
+});
+
+export type TransactionFilter = z.infer<typeof TransactionFilterSchema>;
 
 export interface AttachmentDto {
   id: string;

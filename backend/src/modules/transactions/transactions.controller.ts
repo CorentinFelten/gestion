@@ -25,6 +25,7 @@ import {
 } from './attachment-upload';
 import {
   CreateTransactionSchema,
+  TransactionFilterSchema,
   UpdateTransactionSchema,
   type CreateTransactionDto,
   type TransactionFilter,
@@ -38,7 +39,10 @@ export class HouseholdTransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
 
   @Get()
-  async list(@Param('householdId') householdId: string, @Query() filter: TransactionFilter) {
+  async list(
+    @Param('householdId') householdId: string,
+    @Query(new ZodValidationPipe(TransactionFilterSchema)) filter: TransactionFilter,
+  ) {
     return this.transactions.list(householdId, filter);
   }
 

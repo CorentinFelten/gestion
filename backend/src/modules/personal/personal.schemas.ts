@@ -86,3 +86,16 @@ export const UpdatePersonalTransactionSchema = z
   .object(PersonalTransactionShape)
   .partial()
   .refine((d) => Object.keys(d).length > 0, { message: 'empty update' });
+
+// ── List filter (query string) ────────────────────────────────────────────────
+// Validated at the boundary so a malformed `?from=abc` returns 400 instead of
+// reaching Prisma (Invalid Date) and surfacing as a generic 500.
+export const PersonalTransactionFilterSchema = z.object({
+  type: z.nativeEnum(PersonalTxnType).optional(),
+  accountId: z.string().min(1).optional(),
+  categoryId: z.string().min(1).optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  payee: z.string().optional(),
+  search: z.string().optional(),
+});

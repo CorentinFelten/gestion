@@ -7,6 +7,7 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { SettlementsService } from './settlements.service';
 import {
   CreateSettlementSchema,
+  SettlementFilterSchema,
   type CreateSettlementDto,
   type SettlementFilter,
 } from './dto/settlement.dto';
@@ -17,7 +18,10 @@ export class SettlementsController {
   constructor(private readonly settlements: SettlementsService) {}
 
   @Get('settlements')
-  async list(@Param('householdId') householdId: string, @Query() filter: SettlementFilter) {
+  async list(
+    @Param('householdId') householdId: string,
+    @Query(new ZodValidationPipe(SettlementFilterSchema)) filter: SettlementFilter,
+  ) {
     return this.settlements.list(householdId, filter);
   }
 
