@@ -1,0 +1,40 @@
+/*
+ * Household-ledger design tokens & utilities. Owned by the household UI; kept out
+ * of the shared index.css to avoid collisions with the personal-finance UI.
+ */
+
+/* Porcelain / ink page surface, sets the ledger's cool, quiet backdrop. */
+body {
+  background: #f6f7f9;
+}
+.dark body {
+  background: #0b0e14;
+}
+
+/* Teal brand selection highlight. */
+::selection {
+  background: rgba(20, 184, 166, 0.25);
+}
+
+/* Uppercase structural label ("eyebrow") that heads sections & categories. */
+.eyebrow {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #6b7280; /* gray-500 */
+}
+.dark .eyebrow {
+  color: #9ca3af; /* gray-400 */
+}
+
+/* Ledger figures: tabular so columns of money align to the cent. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Thin scrollbars for the ledger panes. */
+* {
+  scrollbar-width: thin;
+}
