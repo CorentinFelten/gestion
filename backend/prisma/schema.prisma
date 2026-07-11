@@ -233,8 +233,8 @@ model Transaction {
   categoryId  String? @map("category_id")
   notes       String?
 
-  amountOriginal   Decimal @map("amount_original") @db.Decimal(20, 6)
-  currencyOriginal String  @map("currency_original") @db.Char(3)
+  amountOriginal   Decimal  @map("amount_original") @db.Decimal(20, 6)
+  currencyOriginal String   @map("currency_original") @db.Char(3)
   paymentDate      DateTime @map("payment_date") @db.Date
 
   // frozen FX snapshot (immutable once written)
@@ -249,13 +249,13 @@ model Transaction {
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
-  household            Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  payer                User                  @relation("TransactionPayer", fields: [payerUserId], references: [id])
-  createdBy            User                  @relation("TransactionCreatedBy", fields: [createdById], references: [id])
-  category             Category?             @relation(fields: [categoryId], references: [id])
-  splits               TransactionSplit[]
-  attachments          Attachment[]
-  linkedPersonalTxns   PersonalTransaction[] @relation("PersonalLinkedTransaction")
+  household          Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  payer              User                  @relation("TransactionPayer", fields: [payerUserId], references: [id])
+  createdBy          User                  @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  category           Category?             @relation(fields: [categoryId], references: [id])
+  splits             TransactionSplit[]
+  attachments        Attachment[]
+  linkedPersonalTxns PersonalTransaction[] @relation("PersonalLinkedTransaction")
 
   @@index([householdId, paymentDate])
   @@index([payerUserId])
@@ -380,9 +380,9 @@ model Account {
   sortOrder      Int         @default(0) @map("sort_order")
   createdAt      DateTime    @default(now()) @map("created_at")
 
-  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions        PersonalTransaction[] @relation("AccountPrimary")
-  transfersIn         PersonalTransaction[] @relation("AccountTransferDest")
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions PersonalTransaction[] @relation("AccountPrimary")
+  transfersIn  PersonalTransaction[] @relation("AccountTransferDest")
 
   @@index([userId])
   @@map("accounts")
@@ -408,25 +408,26 @@ model PersonalTransaction {
   payeeSource String?  @map("payee_source") // employer, merchant, "who paid me" / "who I paid"
   notes       String?
 
-  transferAccountId   String? @map("transfer_account_id")   // for type=transfer: destination account
+  transferAccountId   String?  @map("transfer_account_id") // for type=transfer: destination account
   // for cross-currency transfers, the converted amount credited to the destination account
   transferAmount      Decimal? @map("transfer_amount") @db.Decimal(20, 6)
-  linkedTransactionId String? @map("linked_transaction_id") // optional link to a shared-ledger transaction
-  linkedSettlementId  String? @map("linked_settlement_id")  // optional link to a reimbursement
+  linkedTransactionId String?  @map("linked_transaction_id") // optional link to a shared-ledger transaction
+  linkedSettlementId  String?  @map("linked_settlement_id") // optional link to a reimbursement
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account         Account      @relation("AccountPrimary", fields: [accountId], references: [id], onDelete: Cascade)
-  transferAccount Account?     @relation("AccountTransferDest", fields: [transferAccountId], references: [id])
-  category        Category?    @relation(fields: [categoryId], references: [id])
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account           Account      @relation("AccountPrimary", fields: [accountId], references: [id], onDelete: Cascade)
+  transferAccount   Account?     @relation("AccountTransferDest", fields: [transferAccountId], references: [id])
+  category          Category?    @relation(fields: [categoryId], references: [id])
   linkedTransaction Transaction? @relation("PersonalLinkedTransaction", fields: [linkedTransactionId], references: [id])
   linkedSettlement  Settlement?  @relation("PersonalLinkedSettlement", fields: [linkedSettlementId], references: [id])
 
   @@index([userId, txnDate])
   @@index([accountId])
+  @@index([transferAccountId])
   @@index([categoryId])
   @@map("personal_transactions")
 }
