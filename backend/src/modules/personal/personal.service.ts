@@ -7,6 +7,7 @@ import { Decimal } from 'decimal.js';
 import type { Account, PersonalTransaction, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FxService } from '../fx/fx.service';
+import { dateToISO, toUtcDate } from '../fx/date.util';
 import type {
   AccountBalanceDto,
   AccountDto,
@@ -24,6 +25,17 @@ import type {
   UpdateAccountDto,
   UpdatePersonalTransactionDto,
 } from './dto/personal.dto';
+
+/** Columns needed to reduce a transaction set into per-account balances. */
+const BALANCE_ROW_SELECT = {
+  type: true,
+  amount: true,
+  transferAmount: true,
+  accountId: true,
+  transferAccountId: true,
+} satisfies Prisma.PersonalTransactionSelect;
+
+type BalanceRow = Prisma.PersonalTransactionGetPayload<{ select: typeof BALANCE_ROW_SELECT }>;
 
 /** Fields resolved (amount in account currency + frozen FX snapshot + transfer leg). */
 interface ResolvedAmounts {
@@ -59,12 +71,8 @@ export class PersonalService {
     return new Decimal((v ?? 0).toString());
   }
 
-  private toDate(iso: string): Date {
-    return new Date(`${iso}T00:00:00.000Z`);
-  }
-
   private dateOnly(d: Date | null): string | null {
-    return d ? d.toISOString().slice(0, 10) : null;
+    return d ? dateToISO(d) : null;
   }
 
   /** Owner-only account lookup. Throws 404 if the account isn't the user's. */
@@ -186,15 +194,17 @@ export class PersonalService {
         deletedAt: null,
         OR: [{ accountId: account.id }, { transferAccountId: account.id }],
       },
-      select: {
-        type: true,
-        amount: true,
-        transferAmount: true,
-        accountId: true,
-        transferAccountId: true,
-      },
+      select: BALANCE_ROW_SELECT,
     });
+    return this.reduceBalance(account, rows);
+  }
 
+  /**
+   * Pure reduce of a set of (already-fetched) transactions into one account's
+   * native-currency balance. Filters by account id internally so a single shared
+   * `rows` array can be reduced per account (net worth) without an N+1 query.
+   */
+  private reduceBalance(account: Account, rows: BalanceRow[]): Decimal {
     let balance = this.dec(account.openingBalance);
     for (const r of rows) {
       if (r.type === 'income' && r.accountId === account.id) {
@@ -265,7 +275,7 @@ export class PersonalService {
         );
         result.transferAmount = conv.amount.toDecimalPlaces(6);
         result.fxRate = conv.rate;
-        result.fxRateDate = this.toDate(conv.rateDate);
+        result.fxRateDate = toUtcDate(conv.rateDate);
         result.fxSource = conv.source;
       }
       return result;
@@ -289,7 +299,7 @@ export class PersonalService {
         result.amountOriginal = this.dec(dto.amountOriginal);
         result.currencyOriginal = dto.currencyOriginal;
         result.fxRate = conv.rate;
-        result.fxRateDate = this.toDate(conv.rateDate);
+        result.fxRateDate = toUtcDate(conv.rateDate);
         result.fxSource = conv.source;
       }
     }
@@ -321,7 +331,7 @@ export class PersonalService {
         fxRate: r.fxRate ? r.fxRate.toString() : null,
         fxRateDate: r.fxRateDate,
         fxSource: r.fxSource,
-        txnDate: this.toDate(dto.txnDate),
+        txnDate: toUtcDate(dto.txnDate),
         payeeSource: dto.payeeSource ?? null,
         notes: dto.notes ?? null,
         transferAccountId: dto.type === 'transfer' ? dto.transferAccountId ?? null : null,
@@ -458,7 +468,7 @@ export class PersonalService {
       data.fxRate = r.fxRate ? r.fxRate.toString() : null;
       data.fxRateDate = r.fxRateDate;
       data.fxSource = r.fxSource;
-      data.txnDate = this.toDate(merged.txnDate);
+      data.txnDate = toUtcDate(merged.txnDate);
       data.transferAmount = r.transferAmount ? r.transferAmount.toString() : null;
       if (merged.type === 'transfer' && merged.transferAccountId) {
         data.transferAccount = { connect: { id: merged.transferAccountId } };
@@ -515,8 +525,8 @@ export class PersonalService {
     if (filter.categoryId) where.categoryId = filter.categoryId;
     if (filter.from || filter.to) {
       where.txnDate = {};
-      if (filter.from) (where.txnDate as Prisma.DateTimeFilter).gte = this.toDate(filter.from);
-      if (filter.to) (where.txnDate as Prisma.DateTimeFilter).lte = this.toDate(filter.to);
+      if (filter.from) (where.txnDate as Prisma.DateTimeFilter).gte = toUtcDate(filter.from);
+      if (filter.to) (where.txnDate as Prisma.DateTimeFilter).lte = toUtcDate(filter.to);
     }
     if (filter.payee) {
       where.payeeSource = { contains: filter.payee, mode: 'insensitive' };
@@ -557,13 +567,21 @@ export class PersonalService {
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
+    // Single query for all of the user's transactions, then reduce per account
+    // in memory (avoids an N+1 findMany per account). `reduceBalance` filters by
+    // account id, so passing the full set yields the same per-account result.
+    const rows = await this.prisma.personalTransaction.findMany({
+      where: { userId, deletedAt: null },
+      select: BALANCE_ROW_SELECT,
+    });
+
     const rateCache = new Map<string, Decimal>();
     let asOf = new Date().toISOString().slice(0, 10);
     let total = new Decimal(0);
     const breakdown: NetWorthAccountDto[] = [];
 
     for (const account of accounts) {
-      const native = await this.computeBalance(userId, account);
+      const native = this.reduceBalance(account, rows);
 
       let converted: Decimal;
       if (account.currency === profileCurrency) {

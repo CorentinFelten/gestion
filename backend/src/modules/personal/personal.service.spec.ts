@@ -446,6 +446,31 @@ describe('PersonalService, net worth (§3.4 latest rate)', () => {
     expect(getLatestRate).toHaveBeenCalledWith('USD', 'EUR');
   });
 
+  it('fetches transactions once for all accounts (no N+1)', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A, 'EUR');
+
+    // Several accounts, each with transactions, so a per-account fetch would
+    // be visible as multiple findMany calls.
+    for (let i = 0; i < 4; i += 1) {
+      const acc = await service.createAccount(USER_A, {
+        name: `A${i}`, type: 'checking', currency: 'EUR', openingBalance: '100',
+      });
+      await service.createTransaction(USER_A, {
+        accountId: acc.id, type: 'income', amount: '50', txnDate: today,
+      });
+    }
+
+    const findManySpy = jest.spyOn(prisma.personalTransaction, 'findMany');
+    const nw = await service.getNetWorth(USER_A);
+
+    // 4 accounts × (100 opening + 50 income) = 600.
+    expect(nw.total).toBe('600');
+    expect(nw.accounts).toHaveLength(4);
+    // One preload query drives every account's balance (was one-per-account).
+    expect(findManySpy).toHaveBeenCalledTimes(1);
+  });
+
   it('excludes archived (inactive) accounts from net worth', async () => {
     const { service, prisma } = makeService();
     seedUser(prisma, USER_A, 'EUR');
