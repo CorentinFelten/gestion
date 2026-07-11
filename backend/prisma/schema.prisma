@@ -1,0 +1,432 @@
+// Household Spending & Reimbursement App, Prisma schema
+// Money: NUMERIC(20,6) via @db.Decimal(20, 6). FX rates: NUMERIC(20,10).
+// NEVER use Float for money, Prisma maps Decimal -> decimal.js in code.
+// See PLAN.md §4 for the canonical data model.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  owner
+  admin
+  member
+}
+
+enum SplitType {
+  equal
+  exact
+  percent
+  shares
+}
+
+enum AccountType {
+  checking
+  savings
+  cash
+  credit_card
+  investment
+  other
+}
+
+enum PersonalTxnType {
+  income
+  expense
+  transfer
+}
+
+enum CategoryScope {
+  shared
+  personal
+  both
+}
+
+enum CategoryFlow {
+  expense
+  income
+  any
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  declined
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Users & auth
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String   @map("password_hash")
+  displayName       String   @map("display_name")
+  avatarUrl         String?  @map("avatar_url")
+  preferredCurrency String   @default("EUR") @map("preferred_currency") @db.Char(3)
+  // ISO-4217 codes the user has pinned; these render first in every currency
+  // picker for that user. Uppercased + de-duplicated at the API boundary.
+  pinnedCurrencies  String[] @default([]) @map("pinned_currencies")
+  locale            String   @default("fr-FR")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  sessions             Session[]
+  memberships          HouseholdMember[]
+  householdsCreated    Household[]           @relation("HouseholdCreatedBy")
+  categories           Category[]
+  accounts             Account[]
+  personalTransactions PersonalTransaction[]
+  paidTransactions     Transaction[]         @relation("TransactionPayer")
+  createdTransactions  Transaction[]         @relation("TransactionCreatedBy")
+  splits               TransactionSplit[]
+  settlementsFrom      Settlement[]          @relation("SettlementFrom")
+  settlementsTo        Settlement[]          @relation("SettlementTo")
+  settlementsCreated   Settlement[]          @relation("SettlementCreatedBy")
+  auditEntries         AuditLog[]
+  invitesReceived      Invite[]              @relation("InvitesReceived")
+  invitesSent          Invite[]              @relation("InvitesSent")
+
+  @@map("users")
+}
+
+// Server-side sessions (cookie-based auth; httpOnly cookie stores the session id).
+model Session {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  userAgent String?  @map("user_agent")
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Households (groups)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Household {
+  id           String   @id @default(cuid())
+  name         String
+  baseCurrency String   @map("base_currency") @db.Char(3)
+  createdById  String   @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  createdBy    User              @relation("HouseholdCreatedBy", fields: [createdById], references: [id])
+  members      HouseholdMember[]
+  invites      Invite[]
+  categories   Category[]
+  transactions Transaction[]
+  settlements  Settlement[]
+  auditEntries AuditLog[]
+
+  @@map("households")
+}
+
+model HouseholdMember {
+  householdId String   @map("household_id")
+  userId      String   @map("user_id")
+  role        Role     @default(member)
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([householdId, userId])
+  @@index([userId])
+  @@map("household_members")
+}
+
+// In-app invitation: a household owner/admin invites an EXISTING registered
+// user to join. No emails/tokens/links, the invited user accepts or declines
+// from within the app (PLAN.md §12, single-household invariant enforced on accept).
+model Invite {
+  id            String       @id @default(cuid())
+  householdId   String       @map("household_id")
+  invitedUserId String       @map("invited_user_id")
+  invitedById   String       @map("invited_by_id")
+  role          Role         @default(member)
+  status        InviteStatus @default(pending)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  respondedAt   DateTime?    @map("responded_at")
+
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  invitedUser User      @relation("InvitesReceived", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  invitedBy   User      @relation("InvitesSent", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@index([invitedUserId])
+  @@map("invites")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reference, categories (shared + personal)
+// household=null & user=null  → global default category
+// user set                    → private personal category
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Category {
+  id          String        @id @default(cuid())
+  householdId String?       @map("household_id")
+  userId      String?       @map("user_id")
+  scope       CategoryScope @default(shared)
+  flow        CategoryFlow  @default(expense)
+  name        String
+  icon        String?
+  color       String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  household            Household?            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions         Transaction[]
+  settlements          Settlement[]
+  personalTransactions PersonalTransaction[]
+
+  @@index([householdId])
+  @@index([userId])
+  @@map("categories")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FX rate cache
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExchangeRate {
+  id        String   @id @default(cuid())
+  base      String   @db.Char(3)
+  quote     String   @db.Char(3)
+  rateDate  DateTime @map("rate_date") @db.Date
+  rate      Decimal  @db.Decimal(20, 10)
+  source    String
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+
+  @@unique([base, quote, rateDate, source])
+  @@index([base, quote, rateDate])
+  @@map("exchange_rates")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared ledger, transactions / expenses
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Transaction {
+  id          String  @id @default(cuid())
+  householdId String  @map("household_id")
+  payerUserId String  @map("payer_user_id")
+  description String
+  categoryId  String? @map("category_id")
+  notes       String?
+
+  amountOriginal   Decimal @map("amount_original") @db.Decimal(20, 6)
+  currencyOriginal String  @map("currency_original") @db.Char(3)
+  paymentDate      DateTime @map("payment_date") @db.Date
+
+  // frozen FX snapshot (immutable once written)
+  baseCurrency String   @map("base_currency") @db.Char(3)
+  fxRate       Decimal  @map("fx_rate") @db.Decimal(20, 10)
+  fxRateDate   DateTime @map("fx_rate_date") @db.Date
+  fxSource     String   @map("fx_source")
+  amountBase   Decimal  @map("amount_base") @db.Decimal(20, 6) // amount_original * fx_rate
+
+  createdById String    @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  household            Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  payer                User                  @relation("TransactionPayer", fields: [payerUserId], references: [id])
+  createdBy            User                  @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  category             Category?             @relation(fields: [categoryId], references: [id])
+  splits               TransactionSplit[]
+  attachments          Attachment[]
+  linkedPersonalTxns   PersonalTransaction[] @relation("PersonalLinkedTransaction")
+
+  @@index([householdId, paymentDate])
+  @@index([payerUserId])
+  @@index([categoryId])
+  @@map("transactions")
+}
+
+// Invariant (enforce in code + tests): SUM(splits.amountBase) == transaction.amountBase
+model TransactionSplit {
+  id            String    @id @default(cuid())
+  transactionId String    @map("transaction_id")
+  userId        String    @map("user_id")
+  splitType     SplitType @map("split_type")
+  shareValue    Decimal   @map("share_value") @db.Decimal(20, 6) // weight/percent/exact input
+  amountBase    Decimal   @map("amount_base") @db.Decimal(20, 6) // resolved owed amount in base ccy
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@unique([transactionId, userId])
+  @@index([userId])
+  @@map("transaction_splits")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Settlements (category-scoped reimbursements between members)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Settlement {
+  id          String  @id @default(cuid())
+  householdId String  @map("household_id")
+  fromUserId  String  @map("from_user_id")
+  toUserId    String  @map("to_user_id")
+  categoryId  String? @map("category_id") // NULL = overall / cross-category settlement
+
+  amountOriginal   Decimal  @map("amount_original") @db.Decimal(20, 6)
+  currencyOriginal String   @map("currency_original") @db.Char(3)
+  paymentDate      DateTime @map("payment_date") @db.Date
+
+  fxRate     Decimal  @map("fx_rate") @db.Decimal(20, 10)
+  fxRateDate DateTime @map("fx_rate_date") @db.Date
+  fxSource   String   @map("fx_source")
+  amountBase Decimal  @map("amount_base") @db.Decimal(20, 6)
+
+  isFullReset Boolean  @default(false) @map("is_full_reset")
+  note        String?
+  createdById String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  household          Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  fromUser           User                  @relation("SettlementFrom", fields: [fromUserId], references: [id])
+  toUser             User                  @relation("SettlementTo", fields: [toUserId], references: [id])
+  createdBy          User                  @relation("SettlementCreatedBy", fields: [createdById], references: [id])
+  category           Category?             @relation(fields: [categoryId], references: [id])
+  linkedPersonalTxns PersonalTransaction[] @relation("PersonalLinkedSettlement")
+
+  @@index([householdId])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([categoryId])
+  @@map("settlements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Receipts
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Attachment {
+  id            String   @id @default(cuid())
+  transactionId String   @map("transaction_id")
+  filename      String
+  mime          String
+  size          Int
+  storagePath   String   @map("storage_path")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@map("attachments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit log (money-affecting actions)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  householdId String?  @map("household_id")
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  entity      String
+  entityId    String   @map("entity_id")
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([householdId])
+  @@index([entity, entityId])
+  @@map("audit_log")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Personal finance ledger (private per user)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Account {
+  id             String      @id @default(cuid())
+  userId         String      @map("user_id")
+  name           String
+  type           AccountType
+  currency       String      @db.Char(3)
+  // ISO-3166 alpha-2 country the account belongs to (drives its default
+  // currency: FR → EUR, CA → CAD). App logic supports FR & CA today.
+  country        String      @default("FR") @db.Char(2)
+  openingBalance Decimal     @default(0) @map("opening_balance") @db.Decimal(20, 6)
+  isActive       Boolean     @default(true) @map("is_active")
+  archivedAt     DateTime?   @map("archived_at")
+  sortOrder      Int         @default(0) @map("sort_order")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions        PersonalTransaction[] @relation("AccountPrimary")
+  transfersIn         PersonalTransaction[] @relation("AccountTransferDest")
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model PersonalTransaction {
+  id         String          @id @default(cuid())
+  userId     String          @map("user_id")
+  accountId  String          @map("account_id")
+  type       PersonalTxnType
+  categoryId String?         @map("category_id")
+
+  amount Decimal @db.Decimal(20, 6) // in the account's currency (drives the balance)
+
+  // original entry, if paid in a currency other than the account's
+  amountOriginal   Decimal?  @map("amount_original") @db.Decimal(20, 6)
+  currencyOriginal String?   @map("currency_original") @db.Char(3)
+  fxRate           Decimal?  @map("fx_rate") @db.Decimal(20, 10)
+  fxRateDate       DateTime? @map("fx_rate_date") @db.Date
+  fxSource         String?   @map("fx_source")
+
+  txnDate     DateTime @map("txn_date") @db.Date
+  payeeSource String?  @map("payee_source") // employer, merchant, "who paid me" / "who I paid"
+  notes       String?
+
+  transferAccountId   String? @map("transfer_account_id")   // for type=transfer: destination account
+  // for cross-currency transfers, the converted amount credited to the destination account
+  transferAmount      Decimal? @map("transfer_amount") @db.Decimal(20, 6)
+  linkedTransactionId String? @map("linked_transaction_id") // optional link to a shared-ledger transaction
+  linkedSettlementId  String? @map("linked_settlement_id")  // optional link to a reimbursement
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account         Account      @relation("AccountPrimary", fields: [accountId], references: [id], onDelete: Cascade)
+  transferAccount Account?     @relation("AccountTransferDest", fields: [transferAccountId], references: [id])
+  category        Category?    @relation(fields: [categoryId], references: [id])
+  linkedTransaction Transaction? @relation("PersonalLinkedTransaction", fields: [linkedTransactionId], references: [id])
+  linkedSettlement  Settlement?  @relation("PersonalLinkedSettlement", fields: [linkedSettlementId], references: [id])
+
+  @@index([userId, txnDate])
+  @@index([accountId])
+  @@index([categoryId])
+  @@map("personal_transactions")
+}
