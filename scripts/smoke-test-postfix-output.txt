@@ -1,0 +1,64 @@
+
+=== Gestion post-fix smoke + security regression @ http://localhost:3000/api/v1 ===
+
+  ✓ GET /health -> 200 (200)
+  ✓ GET /auth/csrf issued a token
+  ✓ register A -> 201
+  ✓ register A returned a user id
+  ✓ POST /households without CSRF -> 403 (403)
+  ✓ create household -> 201
+  ✓ household base currency is EUR
+  ✓ invite B -> 201
+  ✓ invite returned a token
+  ✓ register B -> 201
+  ✓ B accept invite -> 201
+  ✓ household has 2 members (2)
+  ✓ GET categories -> 200
+  ✓ seeded shared categories (10)
+  ✓ default "Groceries" category present
+  ✓ create USD transaction -> 201
+    120 USD -> 104.5656 EUR @ rate 0.87138 (2026-03-13)
+  ✓ amount converted to EUR base (104.5656)
+  ✓ frozen multi-currency base = 104.5656 (104.5656)
+  ✓ member B can GET /transactions/:id -> 200
+  ✓ non-member C GET /transactions/:id -> 404 (404)
+  ✓ GET tally (A) -> 200
+    tally(A) Groceries vs Bob: net = 52.2828 EUR (expected +52.28)
+  ✓ B owes A ~half (52.2828 ~ 52.28)
+    settle-up prefill outstanding = 52.2828 EUR
+  ✓ prefill outstanding ~ half (52.2828)
+  ✓ POST reset settlement -> 201
+  ✓ settlement flagged is_full_reset (true)
+    tally(A) Groceries vs Bob after reset: net = 0 EUR (expected 0)
+  ✓ Groceries tally cleared after reset (0)
+  ✓ create personal account -> 201
+  ✓ personal income -> 201
+  ✓ personal expense -> 201
+  ✓ GET /me/net-worth -> 200
+    net worth total = 3100 EUR (expected 3100)
+  ✓ net worth = 3100 (3100)
+
+--- Security regression assertions ---
+
+    gestion_session = sHRjwI3z0n4XGWf_78z7DcrUEy9Kd6KsngRzkuve4hY
+  ✓ SEC-01: session cookie matches ^[A-Za-z0-9_-]{43}$ (len 43)
+  ✓ SEC-01: session cookie is NOT a 25-char cuid
+  ✓ SEC-04: audit_log has a transaction.created row for the tx (1)
+  ✓ SEC-04: creator/payer A can edit tx -> 200
+  ✓ SEC-04: audit_log has a transaction.updated row after edit (1)
+  ✓ SEC-04: non-creator member B edit tx -> 403 (want 403/404)
+  ✓ SEC-04: non-creator member B delete tx -> 403 (want 403/404)
+  ✓ SEC-03: invite for dave -> 201
+  ✓ SEC-03: mismatched-email accept rejected -> 404 (want 404/403)
+  ✓ SEC-03: register dave -> 201
+  ✓ SEC-03: matching-email accept works -> 201
+  ✓ SEC-11: second household created -> 201
+  ✓ SEC-11: tx with another household's category rejected -> 400 (want 400)
+  ✓ SEC-05: forced internal error -> 500 (>=500)
+    500 body = {"statusCode":500,"error":"InternalServerError","message":"Internal server error","path":"/api/v1/households/cmrg1n8h10002nf7tewjqrh8z/transactions","timestamp":"2026-07-11T07:29:16.027Z"}
+  ✓ SEC-05: generic message returned (Internal server error)
+  ✓ SEC-05: body leaks no Prisma/DB/internal strings
+  ✓ SEC-10: disallowed MIME (text/html) attachment -> 400 (want 400)
+
+=== ALL PASSED ===
+

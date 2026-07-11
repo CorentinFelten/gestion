@@ -1,0 +1,38 @@
+# Caddy reverse proxy for Gestion.
+#
+# TLS is REQUIRED for the LAN threat model (a sniffer/ARP-spoof on the LAN can
+# otherwise capture the session cookie in cleartext). Set CADDY_SITE_ADDRESS to a
+# hostname so Caddy provisions HTTPS automatically:
+#   gestion.example.com  → public DNS, auto HTTPS via Let's Encrypt (default)
+#   gestion.home         → LAN-only hostname: uncomment `tls internal` below so
+#                          Caddy issues a cert from its own internal CA
+#                          (trust Caddy's root CA on client devices once).
+#   :80                  → DEV ONLY, no TLS. Not for real deployments.
+
+{
+	# Global options
+	email {$CADDY_ACME_EMAIL}
+}
+
+{$CADDY_SITE_ADDRESS} {
+	encode gzip zstd
+
+	# LAN hostname without public DNS? Uncomment to use Caddy's internal CA
+	# instead of Let's Encrypt (pair with a hostname CADDY_SITE_ADDRESS).
+	# tls internal
+
+	# API → backend (Nest listens on :3000, routes under /api/v1).
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Everything else → static SPA (nginx).
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

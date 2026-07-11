@@ -1,0 +1,42 @@
+
+=== Gestion smoke test @ http://localhost:3000/api/v1 ===
+
+  ✓ GET /health → 200 (200)
+  ✓ GET /auth/csrf issued a token
+  ✓ register A → 201
+  ✓ register A returned a user id
+  ✓ POST /households without CSRF → 403 (403)
+  ✓ create household → 201
+  ✓ household base currency is EUR
+  ✓ invite B → 201
+  ✓ invite returned a token
+  ✓ register B → 201
+  ✓ B accept invite → 201
+  ✓ household has 2 members (2)
+  ✓ GET categories → 200
+  ✓ seeded shared categories (10)
+  ✓ default "Groceries" category present
+  ✓ create USD transaction → 201
+    120 USD → 104.5656 EUR @ rate 0.87138 (2026-03-13)
+  ✓ amount converted to EUR base (104.5656)
+  ✓ member B can GET /transactions/:id → 200
+  ✓ non-member C GET /transactions/:id → 404 (404)
+  ✓ GET tally (A) → 200
+    tally(A) Groceries vs Bob: net = 52.2828 EUR (expected +52.28)
+  ✓ B owes A ~half (52.2828 ≈ 52.28)
+    settle-up prefill outstanding = 52.2828 EUR
+  ✓ prefill outstanding ≈ half (52.2828)
+  ✓ POST reset settlement → 201
+  ✓ settlement flagged is_full_reset (true)
+    tally(A) Groceries vs Bob after reset: net = 0 EUR (expected 0)
+  ✓ Groceries tally cleared after reset (0)
+  ✓ create personal account → 201
+  ✓ personal income → 201
+  ✓ personal expense → 201
+  ✓ GET /me/net-worth → 200
+    net worth total = 3100 EUR (expected 3100)
+  ✓ net worth = 3100 (3100)
+  ✓ GET /categories (personal defaults) → 10
+
+=== ALL PASSED ===
+

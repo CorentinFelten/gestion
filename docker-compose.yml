@@ -1,0 +1,134 @@
+# Gestion, full stack. Bootstrap:  cp .env.example .env && docker compose up -d
+# Services: db (postgres) · backend (Nest) · frontend (nginx SPA) · caddy (proxy)
+#           db-backup (nightly pg_dump sidecar)
+
+services:
+  db:
+    image: postgres:16.14
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Bind mount to a real host directory (./data/postgres) rather than a Docker
+      # named volume, so the database files live in the project tree, easy to
+      # inspect, copy, back up, and migrate to another host (just move ./data).
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Ensure Prisma always sees a DATABASE_URL pointing at the compose db.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: '3000'
+      UPLOAD_DIR: ${UPLOAD_DIR:-/data/uploads}
+    volumes:
+      - ./data/uploads:/data/uploads
+    # migrate deploy runs on start via docker-entrypoint.sh, then boots Nest.
+    healthcheck:
+      test:
+        ['CMD-SHELL', "node -e \"fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.11.4
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-:80}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
+
+  # ── Nightly backup sidecar (PLAN.md §8) ────────────────────────────────────
+  # Runs pg_dump on BACKUP_CRON and prunes dumps older than BACKUP_RETENTION_DAYS.
+  # Restore:  gunzip -c backups/<file>.sql.gz | docker compose exec -T db \
+  #             psql -U $POSTGRES_USER -d $POSTGRES_DB
+  db-backup:
+    image: postgres:16.14
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}
+    volumes:
+      - ./data/backups:/backups
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # Honor BACKUP_CRON's minute+hour for a daily "M H * * *" schedule
+        # (the only shape this app documents). A wildcard in either field falls
+        # back to dumping immediately then every 24h.
+        cron_min=$$(printf '%s' "$${BACKUP_CRON}" | awk '{print $$1}')
+        cron_hour=$$(printf '%s' "$${BACKUP_CRON}" | awk '{print $$2}')
+        case "$${cron_min}$${cron_hour}" in
+          ''|*[!0-9]*) cron_min=''; cron_hour='' ;;
+        esac
+        if [ -n "$${cron_min}" ]; then
+          echo "[db-backup] sidecar up; daily dump at $${cron_hour}:$${cron_min}."
+        else
+          echo "[db-backup] sidecar up; dumping every 24h (BACKUP_CRON not a daily H:M)."
+        fi
+        while true; do
+          if [ -n "$${cron_min}" ]; then
+            now=$$(date +%s)
+            target=$$(date -d "today $${cron_hour}:$${cron_min}" +%s)
+            [ "$${target}" -le "$${now}" ] && target=$$(date -d "tomorrow $${cron_hour}:$${cron_min}" +%s)
+            echo "[db-backup] next dump in $$(( target - now ))s"
+            sleep "$$(( target - now ))"
+          fi
+          ts=$$(date +%Y%m%d-%H%M%S)
+          echo "[db-backup] pg_dump -> /backups/gestion-$$ts.sql.gz"
+          pg_dump | gzip > "/backups/gestion-$$ts.sql.gz" || echo "[db-backup] dump failed"
+          find /backups -name 'gestion-*.sql.gz' -mtime +$${BACKUP_RETENTION_DAYS} -delete
+          [ -n "$${cron_min}" ] || sleep 86400
+        done
+
+# All persistent state is bind-mounted to ./data/* on the host (see each service's
+# `volumes:` above) rather than Docker named volumes, so the data is plain files
+# in the project tree, trivial to back up or migrate (copy ./data to the new host).
+#   ./data/postgres      → PostgreSQL data cluster
+#   ./data/uploads       → uploaded receipts
+#   ./data/backups       → nightly pg_dump archives
+#   ./data/caddy/{data,config} → Caddy certs/state
+# NOTE: ./data/postgres is owned by the container's postgres uid (999) with 0700
+# perms, use sudo (or a throwaway container) to read it from the host.

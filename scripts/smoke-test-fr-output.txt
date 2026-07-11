@@ -1,0 +1,74 @@
+
+=== Gestion FR localization smoke @ http://localhost:3000/api/v1 ===
+
+  ✓ GET /health -> 200 (200)
+  ✓ GET /auth/csrf issued a token
+  ✓ register A -> 201
+  ✓ register A returned a user id
+
+--- Localization: new-user defaults ---
+
+    A.locale = fr-FR , A.preferredCurrency = EUR
+  ✓ new user locale defaults to fr-FR (fr-FR)
+  ✓ new user preferredCurrency defaults to EUR (EUR)
+  ✓ POST /households without CSRF -> 403 (403)
+  ✓ create household -> 201
+  ✓ household base currency is EUR
+  ✓ invite B -> 201
+  ✓ invite returned a token
+  ✓ register B -> 201
+  ✓ B accept invite -> 201
+  ✓ household has 2 members (2)
+
+--- Localization: French seeded categories ---
+
+  ✓ GET categories -> 200
+  ✓ seeded shared categories (10)
+    category names = Alimentation, Électricité, Internet, Eau, Gaz, Loyer, Voyages, Restaurants, Transport, Divers
+  ✓ French category "Alimentation" present
+  ✓ French category "Électricité" present
+  ✓ French category "Loyer" present
+  ✓ French category "Voyages" present
+  ✓ English "Groceries" category is NOT present
+  ✓ no English "Rent"/"Travel" categories
+  ✓ default "Alimentation" category resolved for tx flow
+  ✓ create USD transaction -> 201
+    120 USD -> 104.5656 EUR @ rate 0.87138 (2026-03-13)
+  ✓ frozen multi-currency base = 104.5656 (104.5656)
+  ✓ GET tally (A) -> 200
+  ✓ B owes A ~half (52.2828 ~ 52.28)
+  ✓ prefill outstanding ~ half (52.2828)
+  ✓ POST reset settlement -> 201
+  ✓ settlement flagged is_full_reset (true)
+    tally after reset net = 0 (expected 0)
+  ✓ tally cleared after reset (0)
+  ✓ create personal account -> 201
+  ✓ personal income -> 201
+  ✓ personal expense -> 201
+  ✓ GET /me/net-worth -> 200
+    net worth total = 3100 EUR (expected 3100)
+  ✓ net worth = 3100 (3100)
+
+--- Market: per-account country → default currency ---
+
+  ✓ create CA account (no currency) -> 201
+    CA account: currency=CAD country=CA
+  ✓ CA account currency defaults to CAD (CAD)
+  ✓ CA account country persisted/returned (CA)
+  ✓ create FR account (no currency) -> 201
+    FR account: currency=EUR country=FR
+  ✓ FR account currency defaults to EUR (EUR)
+  ✓ FR account country persisted/returned (FR)
+  ✓ no-country account defaults FR/EUR (FR/EUR)
+
+--- Security regression assertions ---
+
+    gestion_session = KZjphpFVN99dETruBI-Hm_WBelb-qHrkrDPeu5WZTHA
+  ✓ SEC-01: session cookie matches ^[A-Za-z0-9_-]{43}$ (len 43)
+  ✓ SEC-01: session cookie is NOT a 25-char cuid
+    non-creator B edit status = 403
+  ✓ SEC-04: non-creator member B edit tx -> 403 (403)
+  ✓ SEC-04: creator/payer A can edit tx -> 200
+
+=== ALL PASSED ===
+
