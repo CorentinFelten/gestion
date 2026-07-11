@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Never let a stray wide element scroll the whole page sideways on mobile. */
+html,
+body {
+  overflow-x: hidden;
+}
+
+body {
+  @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+}
+
+/*
+ * On phones, form controls must render at ≥16px so iOS Safari doesn't zoom the
+ * viewport when a field is focused. Components keep their compact `text-sm`
+ * look from tablet up; this only bumps the effective size on small screens.
+ */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* App-shell mobile drawer transitions. */
+@keyframes shell-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes shell-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-shell-drawer-in {
+  animation: shell-drawer-in 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.animate-shell-fade-in {
+  animation: shell-fade-in 0.2s ease-out;
+}
+
+/* Touch-momentum scrolling for horizontally scrollable panes (tally matrix). */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shell-drawer-in,
+  .animate-shell-fade-in {
+    animation: none;
+  }
+}
