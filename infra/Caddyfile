@@ -21,6 +21,30 @@
 	# instead of Let's Encrypt (pair with a hostname CADDY_SITE_ADDRESS).
 	# tls internal
 
+	# ── Security headers ────────────────────────────────────────────────────
+	# Applied to every response (SPA + API). Tuned for a self-contained SPA:
+	# all JS/CSS/fonts and Recharts are bundled and served same-origin, so a
+	# strict CSP does not need any external hosts. `'unsafe-inline'` is allowed
+	# for styles only (Vite/Tailwind emit inline <style>); scripts stay locked
+	# to 'self' — including the no-flash theme bootstrap, which is served
+	# same-origin from /theme.js rather than inlined, so no hash is needed.
+	# HSTS is emitted always but only honored by browsers over HTTPS, harmless
+	# on the plain-HTTP dev path.
+	header {
+		# HSTS (2 years). Only takes effect under TLS.
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		# Don't let browsers MIME-sniff responses.
+		X-Content-Type-Options "nosniff"
+		# Don't leak full URLs (may contain ids) to any cross-origin navigation.
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Clickjacking: no framing at all (legacy + CSP frame-ancestors below).
+		X-Frame-Options "DENY"
+		# Content Security Policy for a single-origin, self-contained SPA.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		# Drop the server banner.
+		-Server
+	}
+
 	# API → backend (Nest listens on :3000, routes under /api/v1).
 	handle /api/* {
 		reverse_proxy backend:3000
