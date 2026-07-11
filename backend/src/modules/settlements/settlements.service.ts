@@ -8,25 +8,14 @@ import type { Prisma, Settlement } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FxService } from '../fx/fx.service';
 import { TallyService } from '../tally/tally.service';
+import { roundMoney } from '../transactions/money.util';
+import { dateToISO, todayISO, toUtcDate } from '../fx/date.util';
 import type {
   CreateSettlementDto,
   SettlementDto,
   SettlementFilter,
   SettleUpPrefillDto,
 } from './dto/settlement.dto';
-
-function isoToDate(iso: string): Date {
-  return new Date(`${iso}T00:00:00.000Z`);
-}
-function dateToIso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-function roundMoney(v: Decimal): Decimal {
-  return v.toDecimalPlaces(6, Decimal.ROUND_HALF_UP);
-}
 
 /**
  * Category-scoped reimbursements (PLAN.md §5.3–5.4). Append-only: a reset never
@@ -50,9 +39,9 @@ export class SettlementsService {
       categoryId: s.categoryId,
       amountOriginal: s.amountOriginal.toString(),
       currencyOriginal: s.currencyOriginal,
-      paymentDate: dateToIso(s.paymentDate),
+      paymentDate: dateToISO(s.paymentDate),
       fxRate: s.fxRate.toString(),
-      fxRateDate: dateToIso(s.fxRateDate),
+      fxRateDate: dateToISO(s.fxRateDate),
       fxSource: s.fxSource,
       amountBase: s.amountBase.toString(),
       isFullReset: s.isFullReset,
@@ -99,7 +88,7 @@ export class SettlementsService {
     await this.assertMember(householdId, dto.fromUserId);
     await this.assertMember(householdId, dto.toUserId);
 
-    if (dto.paymentDate > todayIso()) {
+    if (dto.paymentDate > todayISO()) {
       throw new BadRequestException('payment_date cannot be in the future');
     }
 
@@ -160,9 +149,9 @@ export class SettlementsService {
         categoryId,
         amountOriginal: amountOriginal.toString(),
         currencyOriginal: dto.currencyOriginal,
-        paymentDate: isoToDate(dto.paymentDate),
+        paymentDate: toUtcDate(dto.paymentDate),
         fxRate: fx.rate.toString(),
-        fxRateDate: isoToDate(fx.rateDate),
+        fxRateDate: toUtcDate(fx.rateDate),
         fxSource: fx.source,
         amountBase: amountBase.toString(),
         isFullReset,

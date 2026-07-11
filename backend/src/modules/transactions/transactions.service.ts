@@ -9,6 +9,7 @@ import type { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FxService } from '../fx/fx.service';
 import { resolveSplits, roundMoney } from './money.util';
+import { dateToISO, todayISO, toUtcDate } from '../fx/date.util';
 import { allowedMimeTypes, maxUploadBytes } from './attachment-upload';
 import type {
   AttachmentDto,
@@ -20,18 +21,6 @@ import type {
 } from './dto/transaction.dto';
 
 type TxnWithSplits = Prisma.TransactionGetPayload<{ include: { splits: true } }>;
-
-/** UTC calendar date (YYYY-MM-DD) → Date at midnight UTC (for @db.Date). */
-function isoToDate(iso: string): Date {
-  return new Date(`${iso}T00:00:00.000Z`);
-}
-/** Date → YYYY-MM-DD (UTC). */
-function dateToIso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /**
  * Reduce a client-supplied file name to a safe display label: strip any
@@ -70,7 +59,7 @@ export class TransactionsService {
   }
 
   private assertPaymentDate(iso: string): void {
-    if (iso > todayIso()) {
+    if (iso > todayISO()) {
       throw new BadRequestException('payment_date cannot be in the future');
     }
   }
@@ -188,10 +177,10 @@ export class TransactionsService {
       notes: txn.notes,
       amountOriginal: txn.amountOriginal.toString(),
       currencyOriginal: txn.currencyOriginal,
-      paymentDate: dateToIso(txn.paymentDate),
+      paymentDate: dateToISO(txn.paymentDate),
       baseCurrency: txn.baseCurrency,
       fxRate: txn.fxRate.toString(),
-      fxRateDate: dateToIso(txn.fxRateDate),
+      fxRateDate: dateToISO(txn.fxRateDate),
       fxSource: txn.fxSource,
       amountBase: txn.amountBase.toString(),
       splits: txn.splits.map(
@@ -220,8 +209,8 @@ export class TransactionsService {
     if (filter.currency) where.currencyOriginal = filter.currency.toUpperCase();
     if (filter.from || filter.to) {
       where.paymentDate = {};
-      if (filter.from) where.paymentDate.gte = isoToDate(filter.from);
-      if (filter.to) where.paymentDate.lte = isoToDate(filter.to);
+      if (filter.from) where.paymentDate.gte = toUtcDate(filter.from);
+      if (filter.to) where.paymentDate.lte = toUtcDate(filter.to);
     }
     if (filter.search) {
       where.OR = [
@@ -294,10 +283,10 @@ export class TransactionsService {
         notes: dto.notes ?? null,
         amountOriginal: amountOriginal.toString(),
         currencyOriginal: dto.currencyOriginal,
-        paymentDate: isoToDate(dto.paymentDate),
+        paymentDate: toUtcDate(dto.paymentDate),
         baseCurrency,
         fxRate: fx.rate.toString(),
-        fxRateDate: isoToDate(fx.rateDate),
+        fxRateDate: toUtcDate(fx.rateDate),
         fxSource: fx.source,
         amountBase: amountBase.toString(),
         createdById: createdByUserId,
@@ -350,7 +339,7 @@ export class TransactionsService {
     }
     const notes = dto.notes !== undefined ? dto.notes : existing.notes;
     const currencyOriginal = dto.currencyOriginal ?? existing.currencyOriginal;
-    const paymentDate = dto.paymentDate ?? dateToIso(existing.paymentDate);
+    const paymentDate = dto.paymentDate ?? dateToISO(existing.paymentDate);
     const amountOriginal = roundMoney(
       new Decimal(dto.amountOriginal ?? existing.amountOriginal.toString()),
     );
@@ -363,9 +352,9 @@ export class TransactionsService {
     // Re-freeze FX only when the date or currency changed; otherwise keep the
     // immutable historical snapshot untouched.
     let fxRate = new Decimal(existing.fxRate.toString());
-    let fxRateDate = dateToIso(existing.fxRateDate);
+    let fxRateDate = dateToISO(existing.fxRateDate);
     let fxSource = existing.fxSource;
-    const dateChanged = paymentDate !== dateToIso(existing.paymentDate);
+    const dateChanged = paymentDate !== dateToISO(existing.paymentDate);
     const currencyChanged = currencyOriginal !== existing.currencyOriginal;
     if (dateChanged || currencyChanged) {
       const fx = await this.fx.convert(
@@ -408,9 +397,9 @@ export class TransactionsService {
           notes,
           amountOriginal: amountOriginal.toString(),
           currencyOriginal,
-          paymentDate: isoToDate(paymentDate),
+          paymentDate: toUtcDate(paymentDate),
           fxRate: fxRate.toString(),
-          fxRateDate: isoToDate(fxRateDate),
+          fxRateDate: toUtcDate(fxRateDate),
           fxSource,
           amountBase: amountBase.toString(),
           splits: {
