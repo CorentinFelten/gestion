@@ -58,4 +58,28 @@ describe('AllExceptionsFilter', () => {
     expect(body.statusCode).toBe(400);
     expect(body.message).toBe('displayName is required');
   });
+
+  it('preserves extra keys (e.g. Zod `errors`) attached to the exception body', () => {
+    const { host, json, status } = makeHost();
+
+    // Mirrors what ZodValidationPipe throws: a structured field-error array.
+    filter.catch(
+      new BadRequestException({
+        message: 'Validation failed',
+        errors: [{ path: 'from', message: 'must be an ISO date (YYYY-MM-DD)' }],
+      }),
+      host,
+    );
+
+    expect(status).toHaveBeenCalledWith(400);
+    const body = json.mock.calls[0][0];
+    expect(body.message).toBe('Validation failed');
+    // The field-level errors array must survive into the envelope.
+    expect(body.errors).toEqual([
+      { path: 'from', message: 'must be an ISO date (YYYY-MM-DD)' },
+    ]);
+    // Envelope keys are still present and not clobbered.
+    expect(body.statusCode).toBe(400);
+    expect(body.path).toBe('/transactions');
+  });
 });

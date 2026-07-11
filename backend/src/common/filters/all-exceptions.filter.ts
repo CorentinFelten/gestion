@@ -25,12 +25,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: unknown = 'Internal server error';
     let error = 'InternalServerError';
+    // Extra keys attached to a deliberate HttpException body (e.g. the `errors`
+    // array from ZodValidationPipe). Preserved so field-level validation detail
+    // reaches the client. Only ever populated from an HttpException we threw, so
+    // this never surfaces internal (Prisma/driver) details.
+    let extra: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const body = exception.getResponse();
       error = exception.name;
-      message = typeof body === 'string' ? body : (body as Record<string, unknown>).message ?? body;
+      if (typeof body === 'string') {
+        message = body;
+      } else {
+        const record = body as Record<string, unknown>;
+        message = record.message ?? body;
+        const { message: _m, statusCode: _s, error: _e, ...rest } = record;
+        extra = rest;
+      }
     }
     // For any non-HttpException (status stays 500), we deliberately keep the
     // generic `message`/`error` defaults above and never surface
@@ -49,6 +61,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       statusCode: status,
       error,
       message,
+      ...extra,
       path: request.url,
       timestamp: new Date().toISOString(),
     });
