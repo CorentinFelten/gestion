@@ -2,10 +2,23 @@
 # Services: db (postgres) · backend (Nest) · frontend (nginx SPA) · caddy (proxy)
 #           db-backup (nightly pg_dump sidecar)
 
+# ── Shared config (YAML anchors, DRY) ────────────────────────────────────────
+# Bounded container logs: cap each service's json-file log at 3 × 10 MB so a
+# chatty/looping container can't fill the host disk. Applied to every service
+# below via `logging: *default-logging`.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
 services:
   db:
     image: postgres:16.14
     restart: unless-stopped
+    logging: *default-logging
+    # Conservative cap for a home server; raise if the DB grows large.
+    mem_limit: 512m
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -27,6 +40,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 512m
     depends_on:
       db:
         condition: service_healthy
@@ -54,10 +69,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 128m
 
   caddy:
     image: caddy:2.11.4
     restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 128m
     depends_on:
       - backend
       - frontend
@@ -79,6 +98,8 @@ services:
   db-backup:
     image: postgres:16.14
     restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 256m
     depends_on:
       db:
         condition: service_healthy
@@ -87,12 +108,18 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB}
+      # Abort a dump whose queries hang past this (ms) instead of blocking forever
+      # and never producing a backup (default 30 min). Applied to the dump session.
+      PGOPTIONS: ${BACKUP_STATEMENT_TIMEOUT:--c statement_timeout=1800000}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
       BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}
     volumes:
       - ./data/backups:/backups
+    # bash (present in the postgres image) so the dump pipeline can use pipefail:
+    # a failed pg_dump piped into gzip previously still produced a "successful"
+    # .gz that retention would happily keep, silently hiding data loss.
     entrypoint:
-      - /bin/sh
+      - /bin/bash
       - -c
       - |
         # Honor BACKUP_CRON's minute+hour for a daily "M H * * *" schedule
@@ -108,6 +135,29 @@ services:
         else
           echo "[db-backup] sidecar up; dumping every 24h (BACKUP_CRON not a daily H:M)."
         fi
+        # Dump to a temp file, verify the gzip stream, then atomically rename to
+        # the final name. Retention only ever sees complete, integrity-checked
+        # archives; a partial/failed dump is discarded, never promoted.
+        do_backup() {
+          ts=$$(date +%Y%m%d-%H%M%S)
+          tmp="/backups/.gestion-$$ts.sql.gz.partial"
+          final="/backups/gestion-$$ts.sql.gz"
+          echo "[db-backup] pg_dump -> $$final"
+          if ! ( set -o pipefail; pg_dump | gzip -c > "$$tmp" ); then
+            echo "[db-backup] ERROR: pg_dump/gzip failed; discarding partial dump"
+            rm -f "$$tmp"
+            return 1
+          fi
+          if ! gzip -t "$$tmp"; then
+            echo "[db-backup] ERROR: gzip integrity check failed; discarding dump"
+            rm -f "$$tmp"
+            return 1
+          fi
+          mv "$$tmp" "$$final"
+          echo "[db-backup] OK: $$final ($$(wc -c < "$$final") bytes, gzip-verified)"
+        }
+        # Sweep any leftover *.partial from a crash/kill mid-dump.
+        rm -f /backups/.gestion-*.sql.gz.partial 2>/dev/null || true
         while true; do
           if [ -n "$${cron_min}" ]; then
             now=$$(date +%s)
@@ -116,9 +166,9 @@ services:
             echo "[db-backup] next dump in $$(( target - now ))s"
             sleep "$$(( target - now ))"
           fi
-          ts=$$(date +%Y%m%d-%H%M%S)
-          echo "[db-backup] pg_dump -> /backups/gestion-$$ts.sql.gz"
-          pg_dump | gzip > "/backups/gestion-$$ts.sql.gz" || echo "[db-backup] dump failed"
+          # Never let a failed dump kill the sidecar; log and retry next cycle.
+          do_backup || echo "[db-backup] dump cycle failed; retrying next schedule"
+          # Prune old dumps only after a fresh one landed (partial files excluded).
           find /backups -name 'gestion-*.sql.gz' -mtime +$${BACKUP_RETENTION_DAYS} -delete
           [ -n "$${cron_min}" ] || sleep 86400
         done
