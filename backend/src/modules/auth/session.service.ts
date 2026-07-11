@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -18,6 +19,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 @Injectable()
 export class SessionService {
+  private readonly logger = new Logger(SessionService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private get ttlMs(): number {
@@ -52,5 +55,29 @@ export class SessionService {
   /** Revoke every session for a user (e.g. password change / deactivate). */
   async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.session.deleteMany({ where: { userId } });
+  }
+
+  /**
+   * Sweep expired session rows. Sessions are otherwise only removed on
+   * logout/password-change, so an abandoned session lingers until its TTL and
+   * then forever, growing the table unbounded. AuthGuard already rejects an
+   * expired row, so this is pure hygiene (returns the number purged for logs).
+   */
+  async purgeExpired(now: Date = new Date()): Promise<number> {
+    const res = await this.prisma.session.deleteMany({
+      where: { expiresAt: { lt: now } },
+    });
+    return res.count;
+  }
+
+  /** Hourly cleanup of expired sessions (runs off @nestjs/schedule). */
+  @Cron(CronExpression.EVERY_HOUR, { name: 'session-purge-expired' })
+  async purgeExpiredScheduled(): Promise<void> {
+    try {
+      const purged = await this.purgeExpired();
+      if (purged > 0) this.logger.log(`Purged ${purged} expired session(s)`);
+    } catch (err) {
+      this.logger.error(`Session purge failed: ${(err as Error).message}`);
+    }
   }
 }
