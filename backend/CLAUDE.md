@@ -3,7 +3,7 @@
 Scoped guidance for `/backend`. Read the **root `CLAUDE.md`** first for domain concepts, security model, and the QA process. This file is the tactical guide for the API.
 
 ## Stack
-Node 24 · **NestJS 11** · TypeScript · **Prisma 6** · PostgreSQL 16 · decimal.js · zod · argon2 · @nestjs/throttler · helmet · cookie-parser. Global prefix **`/api/v1`**.
+Node 24 · **NestJS 11** · TypeScript · **Prisma 7** (engine-free; `pg` driver adapter) · PostgreSQL 16 · decimal.js · zod · argon2 · @nestjs/throttler · helmet · cookie-parser. Global prefix **`/api/v1`**.
 
 ## Module map (`src/modules/`)
 | Module | Responsibility |
@@ -35,7 +35,8 @@ Shared infra: `src/common/`, `AuthGuard`, `HouseholdMemberGuard`, `RoleGuard`, `
 
 ## Prisma / migrations
 - The **rtk hook intercepts `npx prisma`**, call the binary directly: `./node_modules/.bin/prisma <cmd>`.
-- Migrations are append-only folders in `prisma/migrations/`. **Never edit `0000_init`.** Current: `0000_init`, `0001_account_country`, `0002_user_pinned_currencies`, `0003_inapp_invites`.
+- **Prisma 7, engine-free.** Runtime uses the **`pg` driver adapter** in `PrismaService` (`new PrismaPg({ connectionString, max })`); pool size = `DB_POOL_MAX` (default 10). The datasource `url` is in **`prisma.config.ts`** (root of `/backend`, read from `process.env.DATABASE_URL`) — it is NOT in `schema.prisma` (Prisma 7 removed schema-level `url`). `prisma.config.ts` is excluded from `tsconfig.build.json` (keeps `dist/main.js`), and copied into both Docker stages (generate + migrate deploy need it). An npm `override` pins `@hono/node-server` past GHSA-92pp-h63x-v22m (pulled transitively by `@prisma/dev`, used only by the unused `prisma dev` command).
+- Migrations are append-only folders in `prisma/migrations/`. **Never edit `0000_init`.** Current: `0000_init`, `0001_account_country`, `0002_user_pinned_currencies`, `0003_inapp_invites`, `0004_personal_transfer_index`.
 - To add a migration without a running DB, generate the delta via `prisma migrate diff ... --script` into a new folder, then `prisma generate`. Backend container runs `prisma migrate deploy` on startup (`docker-entrypoint.sh`).
 - **Enum values are stable internal keys** (`checking`, `owner`, `income`, `FR`…), never rename (breaks migrations); French labels live in the frontend's `terms.ts`.
 - Seeds: `prisma/seed.ts` (+ `categories.constants.ts` for French defaults). `preferredCurrency` default `EUR`, `locale` default `fr-FR`.
