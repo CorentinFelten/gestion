@@ -358,9 +358,12 @@ export const fr = {
     baseCurrencyWarning: 'Changer la devise de base récupère les taux historiques et recalcule tous les soldes, une opération lourde et ponctuelle.',
     householdSaveError: 'Impossible de mettre à jour le foyer.',
     saveHousehold: 'Enregistrer le foyer',
-    // Received invitations (visible to everyone, even without a household)
+    // Invitations (received by everyone + sent/managed by owners & admins)
     invitations: 'Invitations',
     invitationsHint:
+      'Gérez ici les invitations à rejoindre un foyer.',
+    invitationsReceived: 'Reçues',
+    invitationsReceivedHint:
       'Les invitations à rejoindre un foyer que d’autres membres vous ont envoyées apparaissent ici.',
     noReceivedInvites: 'Aucune invitation pour le moment.',
     receivedInvitesError: 'Impossible de charger vos invitations.',

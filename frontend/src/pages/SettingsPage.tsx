@@ -84,15 +84,7 @@ export default function SettingsPage() {
 
       <ProfileSection user={user} currencyList={currencyList} />
 
-      <Card className="p-6">
-        <Eyebrow>{t('settings.invitations')}</Eyebrow>
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-          {t('settings.invitationsHint')}
-        </p>
-        <div className="mt-4">
-          <ReceivedInvitesList />
-        </div>
-      </Card>
+      <InvitationsSection householdId={householdId} isAdmin={isAdmin} />
 
       <PinnedCurrenciesSection user={user} currencyList={currencyList} />
 
@@ -481,8 +473,48 @@ function MembersSection({
           ))
         )}
       </div>
+    </Card>
+  );
+}
 
-      {isAdmin ? <InviteMemberForm householdId={householdId} /> : null}
+/**
+ * Unified invitations hub. Groups every invite-related control in one place:
+ *   • "Reçues", the current user's own pending invitations (accept / refuse),
+ *     always shown (also the entry point when the user has no household yet);
+ *   • for owners/admins of a household, the invite-a-user form and the pending
+ *     SENT invitations (revoke), previously buried inside the Members card.
+ */
+function InvitationsSection({
+  householdId,
+  isAdmin,
+}: {
+  householdId?: string;
+  isAdmin: boolean;
+}) {
+  const { t } = useT();
+
+  return (
+    <Card className="p-6">
+      <Eyebrow>{t('settings.invitations')}</Eyebrow>
+      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+        {t('settings.invitationsHint')}
+      </p>
+
+      <div className="mt-5">
+        <Eyebrow>{t('settings.invitationsReceived')}</Eyebrow>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          {t('settings.invitationsReceivedHint')}
+        </p>
+        <div className="mt-4">
+          <ReceivedInvitesList />
+        </div>
+      </div>
+
+      {householdId && isAdmin ? (
+        <div className="mt-6 border-t border-gray-100 pt-6 dark:border-gray-800">
+          <InviteMemberForm householdId={householdId} />
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -514,7 +546,7 @@ function InviteMemberForm({ householdId }: { householdId: string }) {
   }
 
   return (
-    <div className="mt-6">
+    <div>
       <Eyebrow>{t('settings.inviteSomeone')}</Eyebrow>
       <form onSubmit={submitInvite} className="mt-3 flex flex-wrap items-end gap-3">
         <Field label={t('settings.chooseUser')} htmlFor="i-user" className="min-w-[14rem] flex-1">
