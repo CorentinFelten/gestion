@@ -1,5 +1,5 @@
 # ── Build stage ──────────────────────────────────────────────────────────────
-FROM node:24.18.0-slim AS build
+FROM node:26.5.0-slim AS build
 WORKDIR /app
 
 # Prisma needs OpenSSL at generate time.
@@ -17,7 +17,7 @@ COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
 # ── Runtime stage ────────────────────────────────────────────────────────────
-FROM node:24.18.0-slim AS runtime
+FROM node:26.5.0-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
