@@ -82,14 +82,12 @@ export default function SettingsPage() {
         }
       />
 
+      {/* ── You: profile & personal preferences ─────────────────────────── */}
       <ProfileSection user={user} currencyList={currencyList} />
-
-      <InvitationsSection householdId={householdId} isAdmin={isAdmin} />
 
       <PinnedCurrenciesSection user={user} currencyList={currencyList} />
 
-      <PersonalCategoriesSection userId={user.id} />
-
+      {/* ── Household & people ───────────────────────────────────────────── */}
       {household.data ? (
         <HouseholdSection
           householdId={household.data.id}
@@ -107,11 +105,16 @@ export default function SettingsPage() {
       )}
 
       {household.data && householdId ? (
-        <HouseholdCategoriesSection householdId={householdId} />
+        <MembersSection householdId={householdId} isAdmin={isAdmin} currentUserId={user.id} />
       ) : null}
 
+      <InvitationsSection householdId={householdId} isAdmin={isAdmin} />
+
+      {/* ── Categories (personal + household, grouped) ───────────────────── */}
+      <PersonalCategoriesSection userId={user.id} />
+
       {household.data && householdId ? (
-        <MembersSection householdId={householdId} isAdmin={isAdmin} currentUserId={user.id} />
+        <HouseholdCategoriesSection householdId={householdId} />
       ) : null}
     </div>
   );
