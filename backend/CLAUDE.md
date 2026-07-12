@@ -3,7 +3,7 @@
 Scoped guidance for `/backend`. Read the **root `CLAUDE.md`** first for domain concepts, security model, and the QA process. This file is the tactical guide for the API.
 
 ## Stack
-Node 24 · **NestJS 11** · TypeScript · **Prisma 7** (engine-free; `pg` driver adapter) · PostgreSQL 16 · decimal.js · zod · argon2 · @nestjs/throttler · helmet · cookie-parser. Global prefix **`/api/v1`**.
+Node 24 · **NestJS 11** · TypeScript · **Prisma 7** (engine-free; `pg` driver adapter) · PostgreSQL 16 · decimal.js · zod 4 · argon2 · @nestjs/throttler · helmet · cookie-parser. Global prefix **`/api/v1`**.
 
 ## Module map (`src/modules/`)
 | Module | Responsibility |
