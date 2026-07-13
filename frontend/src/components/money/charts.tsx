@@ -110,6 +110,17 @@ function useMoneyAxisFormatter() {
 }
 
 /**
+ * Localize a time-bucket key for an axis/tooltip. The backend sends the raw key
+ * as the label for time-series (e.g. `2026-03`), so localize month keys here;
+ * yearly keys (`2026`) are already display-ready and pass through unchanged.
+ */
+function useTimeBucketLabel() {
+  const f = useFormat();
+  return (key: string) =>
+    /^\d{4}-\d{2}$/.test(key) ? f.monthKey(key, MONTH_AXIS_OPTS) : key;
+}
+
+/**
  * Shared `<Legend>` props that tag every entry with the chart's currency, so the
  * money unit is explicit on the chart itself (not only in the hover tooltip).
  */
@@ -131,11 +142,11 @@ export function CashflowChart({
   currency: string;
 }) {
   const theme = useChartTheme();
-  const f = useFormat();
   const axisFmt = useMoneyAxisFormatter();
+  const timeLabel = useTimeBucketLabel();
   const data = points.map((p) => ({
-    label: p.label || f.monthKey(p.key, MONTH_AXIS_OPTS),
-    fullLabel: p.label || f.monthKey(p.key, MONTH_AXIS_OPTS),
+    label: timeLabel(p.key),
+    fullLabel: timeLabel(p.key),
     income: toNumber(p.income),
     expense: toNumber(p.expense),
   }));
@@ -191,11 +202,11 @@ export function IncomeTimelineChart({
   currency: string;
 }) {
   const theme = useChartTheme();
-  const f = useFormat();
   const axisFmt = useMoneyAxisFormatter();
+  const timeLabel = useTimeBucketLabel();
   const data = points.map((p) => ({
-    label: p.label || f.monthKey(p.key, MONTH_AXIS_OPTS),
-    fullLabel: p.label || f.monthKey(p.key, MONTH_AXIS_OPTS),
+    label: timeLabel(p.key),
+    fullLabel: timeLabel(p.key),
     income: toNumber(p.income ?? p.total),
   }));
   return (
@@ -375,8 +386,8 @@ export function NetWorthTrendChart({
 }) {
   const theme = useChartTheme();
   const { t } = useT();
-  const f = useFormat();
   const axisFmt = useMoneyAxisFormatter();
+  const timeLabel = useTimeBucketLabel();
 
   // Cumulative net (income − expense), then shift so the final point equals the
   // current net worth. This is an estimated trend from recorded flows (§3.4:
@@ -384,7 +395,7 @@ export function NetWorthTrendChart({
   let acc = new Decimal(0);
   const cumulative = cashflow.map((p) => {
     acc = acc.plus(new Decimal(toNumber(p.income)).minus(toNumber(p.expense)));
-    return { key: p.key, label: p.label || f.monthKey(p.key, MONTH_AXIS_OPTS), value: acc };
+    return { key: p.key, label: timeLabel(p.key), value: acc };
   });
   const last = cumulative.length ? cumulative[cumulative.length - 1].value : new Decimal(0);
   const offset = new Decimal(currentTotal || '0').minus(last);
