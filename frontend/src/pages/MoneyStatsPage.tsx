@@ -1,16 +1,16 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { accountTypeLabel, useT } from '@/i18n';
 import { useStats } from '@/hooks/usePersonalStats';
 import { useAccounts } from '@/hooks/useAccounts';
-import { useNetWorth } from '@/hooks/useNetWorth';
+import { useCaptureSnapshot, useNetWorth, useNetWorthHistory } from '@/hooks/useNetWorth';
 import {
   BreakdownChart,
   CashflowChart,
   CategoryPieChart,
   IncomeTimelineChart,
-  NetWorthTrendChart,
+  NetWorthHistoryChart,
 } from '@/components/money/charts';
 import {
   Card,
@@ -83,20 +83,7 @@ export default function MoneyStatsPage() {
           {(d) => <CashflowChart points={d.points} currency={currency} />}
         </ChartSection>
 
-        <ChartSection
-          title={t('stats.netWorthTrend')}
-          query={cashflow}
-          isEmpty={(d) => d.points.length === 0}
-          note={t('stats.netWorthNote')}
-        >
-          {(d) => (
-            <NetWorthTrendChart
-              cashflow={d.points}
-              currentTotal={netWorth.data?.total ?? '0'}
-              currency={currency}
-            />
-          )}
-        </ChartSection>
+        <NetWorthHistorySection currency={currency} />
 
         <div className="grid gap-8 lg:grid-cols-2">
           <ChartSection
@@ -140,6 +127,56 @@ export default function MoneyStatsPage() {
         </ChartSection>
       </div>
     </div>
+  );
+}
+
+/**
+ * Real patrimoine-net trend from captured daily snapshots. On mount we POST one
+ * snapshot (idempotent, one row/day) so a fresh user always sees at least
+ * today's point rather than an empty chart.
+ */
+function NetWorthHistorySection({ currency }: { currency: string }) {
+  const { t } = useT();
+  const history = useNetWorthHistory(365);
+  const snapshot = useCaptureSnapshot();
+  const captured = useRef(false);
+
+  useEffect(() => {
+    if (captured.current) return;
+    captured.current = true;
+    snapshot.mutate();
+    // Fire exactly once on mount; the mutation invalidates the history query.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const points = history.data?.points ?? [];
+  const chartCurrency = history.data?.profileCurrency ?? currency;
+
+  return (
+    <section>
+      <SectionTitle>{t('stats.netWorthTrend')}</SectionTitle>
+      <Card className="p-5">
+        {history.isLoading ? (
+          <LoadingBlock label={t('stats.loading')} />
+        ) : history.isError ? (
+          <ErrorBlock
+            message={errorMessage(history.error)}
+            onRetry={() => void history.refetch()}
+          />
+        ) : points.length > 0 ? (
+          <>
+            <NetWorthHistoryChart points={points} currency={chartCurrency} />
+            <p className="mt-3 text-xs text-gray-400">{t('stats.netWorthHistoryNote')}</p>
+          </>
+        ) : (
+          <EmptyBlock
+            icon="◇"
+            title={t('stats.netWorthHistoryEmptyTitle')}
+            message={t('stats.netWorthHistoryEmptyMessage')}
+          />
+        )}
+      </Card>
+    </section>
   );
 }
 
