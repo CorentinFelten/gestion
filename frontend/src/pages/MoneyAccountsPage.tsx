@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -15,8 +15,10 @@ import {
   useAccounts,
   useAccountBalance,
   useCreateAccount,
+  usePayoff,
   useUpdateAccount,
   type CreateAccountInput,
+  type UpdateAccountInput,
 } from '@/hooks/useAccounts';
 import { useNetWorth } from '@/hooks/useNetWorth';
 import {
@@ -25,6 +27,7 @@ import {
 } from '@/hooks/usePersonalTx';
 import { AccountLedger } from '@/components/money/AccountLedger';
 import { MoneyAmount } from '@/components/money/MoneyAmount';
+import { PayoffBalanceChart } from '@/components/money/charts';
 import { ACCOUNT_TYPE_ICON } from '@/components/money/format';
 import {
   Button,
@@ -53,6 +56,7 @@ export default function MoneyAccountsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Native balances from net worth (active accounts).
   const balanceByAccount = useMemo(() => {
@@ -163,6 +167,14 @@ export default function MoneyAccountsPage() {
 
                     <button
                       type="button"
+                      onClick={() => setEditingId((id) => (id === acc.id ? null : acc.id))}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                    >
+                      {editingId === acc.id ? t('common.close') : t('common.edit')}
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => updateAccount.mutate({ id: acc.id, isActive: !acc.isActive })}
                       disabled={updateAccount.isPending}
                       className="rounded-md px-2 py-1 text-xs font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-200"
@@ -170,6 +182,21 @@ export default function MoneyAccountsPage() {
                       {acc.isActive ? t('common.archive') : t('accounts.restore')}
                     </button>
                   </div>
+
+                  {editingId === acc.id ? (
+                    <EditAccountForm
+                      account={acc}
+                      pending={updateAccount.isPending}
+                      error={updateAccount.isError ? errorMessage(updateAccount.error) : null}
+                      onCancel={() => setEditingId(null)}
+                      onSubmit={(input) =>
+                        updateAccount.mutate(
+                          { id: acc.id, ...input },
+                          { onSuccess: () => setEditingId(null) },
+                        )
+                      }
+                    />
+                  ) : null}
 
                   {isSelected ? (
                     <SelectedLedger accountId={acc.id} accountsById={accountsById} />
@@ -220,6 +247,11 @@ function SelectedLedger({
 
   return (
     <div className="border-t border-gray-100 p-4 dark:border-gray-800">
+      {account.type === 'credit_card' ? (
+        <div className="mb-4">
+          <PayoffCalculator account={account} />
+        </div>
+      ) : null}
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           {t('accounts.ledger')}
@@ -296,6 +328,11 @@ function CreateAccountForm({
   const [currency, setCurrency] = useState(defaultCurrency);
   const [currencyTouched, setCurrencyTouched] = useState(false);
   const [openingBalance, setOpeningBalance] = useState('0');
+  const [interestRate, setInterestRate] = useState('');
+  const [creditLimit, setCreditLimit] = useState('');
+  const [minPayment, setMinPayment] = useState('');
+
+  const isCredit = type === 'credit_card';
 
   // Guarantee the selected currency is present, then order pinned-first.
   const currencyBase = useMemo(() => [currency, ...CURRENCIES], [currency]);
@@ -313,6 +350,10 @@ function CreateAccountForm({
             currency,
             country,
             openingBalance: openingBalance.trim() || '0',
+            // Credit-card-only fields; omit when empty or not a card.
+            ...(isCredit && interestRate.trim() ? { interestRate: interestRate.trim() } : {}),
+            ...(isCredit && creditLimit.trim() ? { creditLimit: creditLimit.trim() } : {}),
+            ...(isCredit && minPayment.trim() ? { minPayment: minPayment.trim() } : {}),
           });
         }}
       >
@@ -398,6 +439,54 @@ function CreateAccountForm({
           </div>
         </div>
 
+        {isCredit ? (
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-800 dark:bg-gray-950/40">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">
+              {t('accounts.creditCardDetails')}
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field
+                label={t('accounts.interestRate')}
+                htmlFor="acc-apr"
+                hint={t('accounts.interestRateHint')}
+              >
+                <TextInput
+                  id="acc-apr"
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={interestRate}
+                  onChange={(e) => setInterestRate(e.target.value)}
+                  placeholder="19,99"
+                />
+              </Field>
+              <Field label={t('accounts.creditLimit')} htmlFor="acc-limit">
+                <TextInput
+                  id="acc-limit"
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                />
+              </Field>
+              <Field label={t('accounts.minPayment')} htmlFor="acc-minpay">
+                <TextInput
+                  id="acc-minpay"
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={minPayment}
+                  onChange={(e) => setMinPayment(e.target.value)}
+                />
+              </Field>
+            </div>
+          </div>
+        ) : null}
+
         {error ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
 
         <div className="mt-5 flex items-center gap-2">
@@ -410,5 +499,232 @@ function CreateAccountForm({
         </div>
       </form>
     </Card>
+  );
+}
+
+/**
+ * Inline account editor: renames the account and, for credit cards, edits the
+ * APR / limit / minimum-payment. Emptying a credit field clears it (sends null).
+ */
+function EditAccountForm({
+  account,
+  onSubmit,
+  onCancel,
+  pending,
+  error,
+}: {
+  account: Account;
+  onSubmit: (input: UpdateAccountInput) => void;
+  onCancel: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const { t } = useT();
+  const [name, setName] = useState(account.name);
+  const [interestRate, setInterestRate] = useState(account.interestRate ?? '');
+  const [creditLimit, setCreditLimit] = useState(account.creditLimit ?? '');
+  const [minPayment, setMinPayment] = useState(account.minPayment ?? '');
+
+  const isCredit = account.type === 'credit_card';
+  // Empty string clears the field (null); a value is trimmed and sent as-is.
+  const orNull = (v: string): string | null => (v.trim() ? v.trim() : null);
+
+  return (
+    <div className="border-t border-gray-100 p-4 dark:border-gray-800">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!name.trim()) return;
+          onSubmit({
+            name: name.trim(),
+            ...(isCredit
+              ? {
+                  interestRate: orNull(interestRate),
+                  creditLimit: orNull(creditLimit),
+                  minPayment: orNull(minPayment),
+                }
+              : {}),
+          });
+        }}
+      >
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          {t('accounts.editAccount')}
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className={isCredit ? '' : 'sm:col-span-2'}>
+            <Field label={t('accounts.accountName')} htmlFor={`edit-name-${account.id}`}>
+              <TextInput
+                id={`edit-name-${account.id}`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </Field>
+          </div>
+          {isCredit ? (
+            <>
+              <Field
+                label={t('accounts.interestRate')}
+                htmlFor={`edit-apr-${account.id}`}
+                hint={t('accounts.interestRateHint')}
+              >
+                <TextInput
+                  id={`edit-apr-${account.id}`}
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={interestRate}
+                  onChange={(e) => setInterestRate(e.target.value)}
+                  placeholder="19,99"
+                />
+              </Field>
+              <Field label={t('accounts.creditLimit')} htmlFor={`edit-limit-${account.id}`}>
+                <TextInput
+                  id={`edit-limit-${account.id}`}
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                />
+              </Field>
+              <Field label={t('accounts.minPayment')} htmlFor={`edit-minpay-${account.id}`}>
+                <TextInput
+                  id={`edit-minpay-${account.id}`}
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={minPayment}
+                  onChange={(e) => setMinPayment(e.target.value)}
+                />
+              </Field>
+            </>
+          ) : null}
+        </div>
+
+        {error ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
+
+        <div className="mt-4 flex items-center gap-2">
+          <Button type="submit" variant="primary" disabled={pending || !name.trim()}>
+            {pending ? t('common.saving') : t('common.save')}
+          </Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Credit-card payoff calculator. The monthly payment defaults to the account's
+ * recorded minimum; the backend amortizes the current balance and returns
+ * months-to-payoff, interest, and a balance schedule we preview as a mini chart.
+ */
+function PayoffCalculator({ account }: { account: Account }) {
+  const { t, plural } = useT();
+  const [monthlyPayment, setMonthlyPayment] = useState(account.minPayment ?? '');
+  const payoff = usePayoff(account.id, monthlyPayment);
+
+  const positive = Number(monthlyPayment) > 0;
+  const data = payoff.data;
+  const nothingOwed = data ? Number(data.startingBalance) <= 0 : false;
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-800 dark:bg-gray-950/40">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        {t('accounts.payoffTitle')}
+      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="sm:w-48">
+          <Field
+            label={t('accounts.monthlyPayment')}
+            htmlFor={`payoff-pay-${account.id}`}
+            hint={account.minPayment ? t('accounts.payoffMinHint') : undefined}
+          >
+            <TextInput
+              id={`payoff-pay-${account.id}`}
+              type="number"
+              inputMode="decimal"
+              step="any"
+              min="0"
+              value={monthlyPayment}
+              onChange={(e) => setMonthlyPayment(e.target.value)}
+              placeholder="0"
+            />
+          </Field>
+        </div>
+      </div>
+
+      {!positive ? (
+        <p className="mt-3 text-xs text-gray-400">{t('accounts.payoffEnterPayment')}</p>
+      ) : payoff.isLoading ? (
+        <p className="mt-3 text-xs text-gray-400">{t('accounts.payoffCalculating')}</p>
+      ) : payoff.isError ? (
+        <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">
+          {errorMessage(payoff.error)}
+        </p>
+      ) : data ? (
+        nothingOwed ? (
+          <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">
+            {t('accounts.payoffNothingOwed')}
+          </p>
+        ) : data.neverPaysOff ? (
+          <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">
+            {t('accounts.payoffNeverClears')}
+          </p>
+        ) : (
+          <div className="mt-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <PayoffStat label={t('accounts.payoffMonths')}>
+                {plural(data.months, {
+                  one: t('accounts.payoffMonthsCountOne'),
+                  other: t('accounts.payoffMonthsCountOther'),
+                })}
+              </PayoffStat>
+              <PayoffStat label={t('accounts.payoffTotalInterest')}>
+                <MoneyAmount
+                  value={data.totalInterest}
+                  currency={data.currency}
+                  size="sm"
+                  flow="expense"
+                  className="font-semibold"
+                />
+              </PayoffStat>
+              <PayoffStat label={t('accounts.payoffTotalPaid')}>
+                <MoneyAmount
+                  value={data.totalPaid}
+                  currency={data.currency}
+                  size="sm"
+                  className="font-semibold"
+                />
+              </PayoffStat>
+            </div>
+            {data.schedule.length > 1 ? (
+              <div className="mt-4">
+                <PayoffBalanceChart
+                  schedule={data.schedule}
+                  currency={data.currency}
+                  monthLabel={(n) => t('accounts.payoffMonthLabel', { n })}
+                />
+              </div>
+            ) : null}
+          </div>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+function PayoffStat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <p className="text-[11px] uppercase tracking-wide text-gray-400">{label}</p>
+      <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{children}</div>
+    </div>
   );
 }
