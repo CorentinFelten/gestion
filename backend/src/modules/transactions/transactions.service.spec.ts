@@ -144,6 +144,21 @@ describe('TransactionsService, SEC-04 audit log', () => {
     expect(arg.data.after).toBeDefined();
   });
 
+  it('rescales an exact split when only the amount is edited (no resent splits)', async () => {
+    const existing = txnRow({
+      amountOriginal: new Decimal('100'),
+      splits: [
+        { id: 'sp1', userId: 'alice', splitType: 'exact', shareValue: new Decimal('30'), amountBase: new Decimal('27') },
+        { id: 'sp2', userId: 'bob', splitType: 'exact', shareValue: new Decimal('70'), amountBase: new Decimal('63') },
+      ],
+    });
+    const { service } = build({ existing });
+    // Previously threw "exact splits must sum to the original amount 120 (got 100)".
+    await expect(
+      service.update('t1', 'alice', { amountOriginal: '120' }),
+    ).resolves.toBeDefined();
+  });
+
   it('writes an audit row on delete (prior state as before)', async () => {
     const { service, auditCreate } = build({ existing: txnRow() });
     await service.remove('t1', 'alice');

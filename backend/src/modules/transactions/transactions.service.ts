@@ -371,17 +371,35 @@ export class TransactionsService {
 
     // Rebuild splits: use the provided splits, else re-resolve the existing
     // participants against the (possibly new) total.
-    const splitInputs = dto.splits
-      ? dto.splits.map((s) => ({
+    let splitInputs;
+    if (dto.splits) {
+      splitInputs = dto.splits.map((s) => ({
+        userId: s.userId,
+        splitType: s.splitType,
+        shareValue: new Decimal(s.shareValue),
+      }));
+    } else {
+      const prev = existing.splits.map((s) => ({
+        userId: s.userId,
+        splitType: s.splitType,
+        shareValue: new Decimal(s.shareValue.toString()),
+      }));
+      // Reused EXACT shares are absolute amounts that sum to the OLD total; if the
+      // amount changed they'd no longer sum and resolveSplits would reject them.
+      // Re-express them as `shares` (weights) so the split rescales proportionally
+      // to the new total, matching how equal/percent/shares already behave.
+      const prevSum = prev.reduce((a, s) => a.plus(s.shareValue), new Decimal(0));
+      const allExact = prev.length > 0 && prev.every((s) => s.splitType === 'exact');
+      if (allExact && prevSum.gt(0) && !roundMoney(prevSum).equals(roundMoney(amountOriginal))) {
+        splitInputs = prev.map((s) => ({
           userId: s.userId,
-          splitType: s.splitType,
-          shareValue: new Decimal(s.shareValue),
-        }))
-      : existing.splits.map((s) => ({
-          userId: s.userId,
-          splitType: s.splitType,
-          shareValue: new Decimal(s.shareValue.toString()),
+          splitType: 'shares' as const,
+          shareValue: s.shareValue,
         }));
+      } else {
+        splitInputs = prev;
+      }
+    }
 
     await this.assertMembers(householdId, [payerUserId, ...splitInputs.map((s) => s.userId)]);
     const resolved = resolveSplits(amountBase, amountOriginal, splitInputs);
