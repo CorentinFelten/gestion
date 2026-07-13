@@ -12,7 +12,9 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
-import { AuthGuard, SESSION_COOKIE } from '../../common/guards/auth.guard';
+import { AuthGuard } from '../../common/guards/auth.guard';
+import { SESSION_COOKIE, resolveSecureCookies, setSessionCookie } from '../../common/session-cookie';
+import { sessionIdleMs } from '../../common/session-timeouts';
 import {
   CsrfGuard,
   CSRF_COOKIE,
@@ -41,33 +43,13 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   /**
-   * Whether to set the `Secure` flag on the session + CSRF cookies.
-   *
-   * Decoupled from NODE_ENV (SEC-02): a `Secure` cookie is refused by the browser
-   * over plain HTTP, so tying it to NODE_ENV forced operators to run
-   * `NODE_ENV=development` just to keep auth working on an HTTP LAN deploy, which
-   * silently cemented cleartext session cookies. Instead:
-   *   1. An explicit `COOKIE_SECURE` (`true`/`false`) always wins, set `false`
-   *      only for a local/dev HTTP run.
-   *   2. Otherwise derive from the `APP_URL` scheme: HTTPS ⇒ Secure. Secure-by-
-   *      default unless `APP_URL` is explicitly `http://`.
+   * The session cookie is ROLLING: its expiry is the idle deadline (now + idle
+   * window), re-issued on login/register here and on every authenticated request
+   * by the AuthGuard, so the browser cookie lifetime tracks activity. The
+   * server-side session carries the authoritative idle + absolute deadlines.
    */
-  private get secureCookies(): boolean {
-    const explicit = process.env.COOKIE_SECURE?.trim().toLowerCase();
-    if (explicit === 'true' || explicit === '1') return true;
-    if (explicit === 'false' || explicit === '0') return false;
-    // No explicit override: HTTPS APP_URL ⇒ Secure; secure-by-default otherwise.
-    return !(process.env.APP_URL ?? '').startsWith('http://');
-  }
-
-  private setSessionCookie(res: Response, sessionId: string, expiresAt: Date): void {
-    res.cookie(SESSION_COOKIE, sessionId, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.secureCookies,
-      expires: expiresAt,
-      path: '/',
-    });
+  private issueSessionCookie(res: Response, sessionId: string): void {
+    setSessionCookie(res, sessionId, new Date(Date.now() + sessionIdleMs()));
   }
 
   /**
@@ -81,7 +63,7 @@ export class AuthController {
     res.cookie(CSRF_COOKIE, token, {
       httpOnly: false, // must be readable by the SPA to set the header
       sameSite: 'lax',
-      secure: this.secureCookies,
+      secure: resolveSecureCookies(),
       path: '/',
     });
     return { csrfToken: token };
@@ -104,7 +86,7 @@ export class AuthController {
       userAgent: req.headers['user-agent'],
       ip: req.ip,
     });
-    this.setSessionCookie(res, result.sessionId, new Date(result.expiresAt));
+    this.issueSessionCookie(res, result.sessionId);
     return { user: result.user };
   }
 
@@ -123,7 +105,7 @@ export class AuthController {
       userAgent: req.headers['user-agent'],
       ip: req.ip,
     });
-    this.setSessionCookie(res, result.sessionId, new Date(result.expiresAt));
+    this.issueSessionCookie(res, result.sessionId);
     return { user: result.user };
   }
 

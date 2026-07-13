@@ -1,9 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import type { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { RequestWithUser } from '../types/authenticated-user';
 import { SESSION_ACTIVITY_THROTTLE_MS, sessionIdleMs } from '../session-timeouts';
+import { SESSION_COOKIE, setSessionCookie } from '../session-cookie';
 
-export const SESSION_COOKIE = 'gestion_session';
+export { SESSION_COOKIE };
 
 /**
  * Session-cookie auth guard.
@@ -39,8 +41,9 @@ export class AuthGuard implements CanActivate {
     }
 
     // Sliding idle timeout: revoke once idle beyond the window.
+    const idleMs = sessionIdleMs();
     const idleForMs = now.getTime() - session.lastActivityAt.getTime();
-    if (idleForMs > sessionIdleMs()) {
+    if (idleForMs > idleMs) {
       throw new UnauthorizedException('Invalid or expired session');
     }
 
@@ -50,6 +53,15 @@ export class AuthGuard implements CanActivate {
         where: { id: session.id },
         data: { lastActivityAt: now },
       });
+    }
+
+    // Roll the client cookie forward so its lifetime tracks activity too (the
+    // browser then drops it on idle, matching the server-side revocation). This
+    // is a response header only; the logout handler's clearCookie still wins as
+    // it is appended afterwards.
+    const response = context.switchToHttp().getResponse<Response>();
+    if (typeof response?.cookie === 'function') {
+      setSessionCookie(response, session.id, new Date(now.getTime() + idleMs));
     }
 
     request.sessionId = session.id;

@@ -10,9 +10,9 @@ import { RoleGuard } from './role.guard';
 import { CsrfGuard, CSRF_COOKIE } from './csrf.guard';
 import type { PrismaService } from '../../prisma/prisma.service';
 
-function contextFor(request: any): ExecutionContext {
+function contextFor(request: any, response: any = { cookie: jest.fn() }): ExecutionContext {
   return {
-    switchToHttp: () => ({ getRequest: () => request }),
+    switchToHttp: () => ({ getRequest: () => request, getResponse: () => response }),
     getHandler: () => undefined,
     getClass: () => undefined,
   } as unknown as ExecutionContext;
@@ -83,7 +83,8 @@ describe('AuthGuard', () => {
       user: { id: 'u1', isActive: true, email: 'a@b.c', displayName: 'Alice', preferredCurrency: 'EUR', locale: 'en-US' },
     });
     const req: any = { cookies: { gestion_session: 's1' } };
-    await expect(guard.canActivate(contextFor(req))).resolves.toBe(true);
+    const res: any = { cookie: jest.fn() };
+    await expect(guard.canActivate(contextFor(req, res))).resolves.toBe(true);
     expect(req.user).toEqual({
       id: 'u1',
       email: 'a@b.c',
@@ -92,6 +93,13 @@ describe('AuthGuard', () => {
       locale: 'en-US',
     });
     expect(req.sessionId).toBe('s1');
+    // Rolling cookie re-issued with a fresh (future) idle expiry.
+    expect(res.cookie).toHaveBeenCalledTimes(1);
+    const [name, value, opts] = res.cookie.mock.calls[0];
+    expect(name).toBe('gestion_session');
+    expect(value).toBe('s1');
+    expect(opts.httpOnly).toBe(true);
+    expect(opts.expires.getTime()).toBeGreaterThan(Date.now());
   });
 
   it('registers activity (slides lastActivityAt) once past the throttle', async () => {
