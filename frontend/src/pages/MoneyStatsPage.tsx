@@ -119,9 +119,16 @@ export default function MoneyStatsPage() {
         <ChartSection
           title={t('stats.spendingByAccount')}
           query={byAccount}
-          isEmpty={(d) => d.points.length === 0}
+          isEmpty={(d) => d.points.every((p) => Number(p.expense ?? 0) <= 0)}
         >
-          {(d) => <BreakdownChart points={withAccountType(d.points)} currency={currency} />}
+          {/* The by-account view's `total` is net flow (income − expense); this
+              chart is titled spending, so plot the expense side explicitly. */}
+          {(d) => (
+            <BreakdownChart
+              points={withAccountType(d.points).map((p) => ({ ...p, total: p.expense ?? '0' }))}
+              currency={currency}
+            />
+          )}
         </ChartSection>
 
         <ChartSection
