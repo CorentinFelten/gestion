@@ -148,7 +148,9 @@ model HouseholdMember {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([householdId, userId])
-  @@index([userId])
+  // v1 single-household invariant, enforced at the DB level so concurrent
+  // invite-accepts / household-creates cannot race a user into two households.
+  @@unique([userId])
   @@map("household_members")
 }
 

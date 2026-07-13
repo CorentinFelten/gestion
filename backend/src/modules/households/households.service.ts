@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Household, Role } from '@prisma/client';
+import { Prisma, type Household, type Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
 import type {
@@ -47,21 +47,31 @@ export class HouseholdsService {
       throw new ConflictException('User already belongs to a household');
     }
 
-    const household = await this.prisma.household.create({
-      data: {
-        name: dto.name,
-        baseCurrency: dto.baseCurrency,
-        createdById: userId,
-        members: {
-          create: { userId, role: 'owner' },
+    let household: Household;
+    try {
+      household = await this.prisma.household.create({
+        data: {
+          name: dto.name,
+          baseCurrency: dto.baseCurrency,
+          createdById: userId,
+          members: {
+            create: { userId, role: 'owner' },
+          },
+          // Seed the default shared category set (groceries, rent, …) so the
+          // tally + transaction UI have buckets from day one (PLAN.md §1).
+          categories: {
+            create: CategoriesService.householdSeedCreateInput(),
+          },
         },
-        // Seed the default shared category set (groceries, rent, …) so the
-        // tally + transaction UI have buckets from day one (PLAN.md §1).
-        categories: {
-          create: CategoriesService.householdSeedCreateInput(),
-        },
-      },
-    });
+      });
+    } catch (e) {
+      // The user_id unique index guards against a concurrent create/accept
+      // racing past the pre-check above.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('User already belongs to a household');
+      }
+      throw e;
+    }
     return this.toDto(household, 'owner');
   }
 

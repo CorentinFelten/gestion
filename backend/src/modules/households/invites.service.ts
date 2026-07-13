@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Role } from '@prisma/client';
+import { Prisma, type Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type {
   CreateInviteDto,
@@ -171,21 +171,33 @@ export class InvitesService {
     }
 
     // Single-household invariant (PLAN.md §12): a user belongs to exactly one.
+    // Fast pre-check for a friendly error; the unique index on user_id is the
+    // real guard against a concurrent accept/create racing past this check.
     const existingMembership = await this.prisma.householdMember.findFirst({ where: { userId } });
     if (existingMembership) {
       throw new ConflictException('User already belongs to a household');
     }
 
-    const [member] = await this.prisma.$transaction([
-      this.prisma.householdMember.create({
-        data: { householdId: invite.householdId, userId, role: invite.role },
-        include: { user: { select: { displayName: true, avatarUrl: true } } },
-      }),
-      this.prisma.invite.update({
-        where: { id: invite.id },
-        data: { status: 'accepted', respondedAt: new Date() },
-      }),
-    ]);
+    let member;
+    try {
+      [member] = await this.prisma.$transaction([
+        this.prisma.householdMember.create({
+          data: { householdId: invite.householdId, userId, role: invite.role },
+          include: { user: { select: { displayName: true, avatarUrl: true } } },
+        }),
+        this.prisma.invite.update({
+          where: { id: invite.id },
+          data: { status: 'accepted', respondedAt: new Date() },
+        }),
+      ]);
+    } catch (e) {
+      // Unique-constraint violation ⇒ a concurrent request already joined a
+      // household; surface the same conflict rather than a generic 500.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('User already belongs to a household');
+      }
+      throw e;
+    }
 
     return {
       userId: member.userId,
