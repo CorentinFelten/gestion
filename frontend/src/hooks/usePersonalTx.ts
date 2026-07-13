@@ -20,6 +20,9 @@ export interface PersonalTxFilters {
   from?: string;
   to?: string;
   search?: string;
+  /** Inclusive amount bounds (decimal strings), matched against the row amount. */
+  minAmount?: string;
+  maxAmount?: string;
 }
 
 function toParams(filters: PersonalTxFilters): Record<string, string> {
@@ -30,6 +33,8 @@ function toParams(filters: PersonalTxFilters): Record<string, string> {
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;
   if (filters.search) params.search = filters.search;
+  if (filters.minAmount) params.minAmount = filters.minAmount;
+  if (filters.maxAmount) params.maxAmount = filters.maxAmount;
   return params;
 }
 
