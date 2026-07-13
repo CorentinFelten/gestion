@@ -312,6 +312,8 @@ export interface NetWorthAccount {
   nativeCurrency: string;
   nativeBalance: string;
   convertedBalance: string;
+  fxRate: string | null;
+  fxRateDate: string | null;
 }
 
 export interface NetWorth {

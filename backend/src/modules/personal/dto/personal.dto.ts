@@ -159,6 +159,8 @@ export interface NetWorthAccountDto {
   nativeCurrency: string;
   nativeBalance: string;
   convertedBalance: string; // in profile currency, at latest rate
+  fxRate: string | null; // latest rate native→profile (null when same currency)
+  fxRateDate: string | null; // ISO YYYY-MM-DD the rate actually applies to
 }
 
 export interface NetWorthDto {

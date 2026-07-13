@@ -726,7 +726,9 @@ export class PersonalService {
       select: BALANCE_ROW_SELECT,
     });
 
-    const rateCache = new Map<string, Decimal>();
+    // Cache the full latest-rate result per foreign currency (rate + the date it
+    // actually applies to) so each account can report the exact rate/date used.
+    const rateCache = new Map<string, { rate: Decimal; rateDate: string }>();
     // Net worth is only as fresh as its stalest input rate: start at today (the
     // ceiling, correct when nothing needs converting) and pull `asOf` back to the
     // oldest latest-rate date actually used (e.g. Friday's rate over a weekend).
@@ -738,17 +740,21 @@ export class PersonalService {
       const native = this.reduceBalance(account, rows);
 
       let converted: Decimal;
+      let fxRate: string | null = null;
+      let fxRateDate: string | null = null;
       if (account.currency === profileCurrency) {
         converted = native;
       } else {
-        let rate = rateCache.get(account.currency);
-        if (!rate) {
+        let cached = rateCache.get(account.currency);
+        if (!cached) {
           const r = await this.fx.getLatestRate(account.currency, profileCurrency);
-          rate = r.rate;
-          rateCache.set(account.currency, rate);
+          cached = { rate: r.rate, rateDate: r.rateDate };
+          rateCache.set(account.currency, cached);
           if (r.rateDate < asOf) asOf = r.rateDate;
         }
-        converted = native.mul(rate).toDecimalPlaces(6);
+        converted = native.mul(cached.rate).toDecimalPlaces(6);
+        fxRate = cached.rate.toString();
+        fxRateDate = cached.rateDate;
       }
 
       total = total.plus(converted);
@@ -759,6 +765,8 @@ export class PersonalService {
         nativeCurrency: account.currency,
         nativeBalance: native.toString(),
         convertedBalance: converted.toString(),
+        fxRate,
+        fxRateDate,
       });
     }
 

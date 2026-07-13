@@ -473,6 +473,7 @@ export const fr = {
     atLatestRate: 'au dernier taux de change',
     nativeBalance: 'Solde en devise',
     inCurrency: 'En {{currency}}',
+    rateLine: '1 {{from}} = {{rate}} {{to}} · {{date}}',
     liability: 'passif',
     // Account ledger
     ledgerEmptyTitle: 'Aucune activité pour l’instant',

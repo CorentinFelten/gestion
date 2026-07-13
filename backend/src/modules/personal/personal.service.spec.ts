@@ -536,14 +536,21 @@ describe('PersonalService, net worth (§3.4 latest rate)', () => {
     expect(usdRow.nativeCurrency).toBe('USD');
     expect(usdRow.nativeBalance).toBe('500');
     expect(usdRow.convertedBalance).toBe('400');
+    // The exact latest rate + its date surface on the converted account.
+    expect(usdRow.fxRate).toBe('0.8');
+    expect(usdRow.fxRateDate).toBe(today);
 
     const cardRow = nw.accounts.find((a) => a.accountId === card.id)!;
     expect(cardRow.nativeBalance).toBe('-300');
     expect(cardRow.convertedBalance).toBe('-300');
+    expect(cardRow.fxRate).toBeNull();
 
     // Same-currency account is not converted via FX.
     const eurRow = nw.accounts.find((a) => a.accountId === checking.id)!;
     expect(eurRow.convertedBalance).toBe('1000');
+    // No FX applied → no rate/date reported.
+    expect(eurRow.fxRate).toBeNull();
+    expect(eurRow.fxRateDate).toBeNull();
     // getLatestRate only called for the USD account.
     expect(getLatestRate).toHaveBeenCalledTimes(1);
     expect(getLatestRate).toHaveBeenCalledWith('USD', 'EUR');

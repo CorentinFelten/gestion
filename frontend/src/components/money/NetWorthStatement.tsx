@@ -94,9 +94,21 @@ export function NetWorthStatement({ data }: { data: NetWorth }) {
                 </div>
                 <div className="w-32 text-right sm:w-40">
                   {converted ? (
-                    <span className={tabular('text-sm text-gray-500 dark:text-gray-400')}>
-                      {f.money(acc.convertedBalance, data.profileCurrency)}
-                    </span>
+                    <>
+                      <span className={tabular('text-sm text-gray-500 dark:text-gray-400')}>
+                        {f.money(acc.convertedBalance, data.profileCurrency)}
+                      </span>
+                      {acc.fxRate && acc.fxRateDate ? (
+                        <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">
+                          {t('money.rateLine', {
+                            from: acc.nativeCurrency,
+                            rate: f.number(acc.fxRate, { maximumFractionDigits: 6 }),
+                            to: data.profileCurrency,
+                            date: f.date(acc.fxRateDate),
+                          })}
+                        </span>
+                      ) : null}
+                    </>
                   ) : (
                     <span className="text-sm text-gray-300 dark:text-gray-600">-</span>
                   )}
