@@ -57,7 +57,8 @@ export default function ReportsPage() {
               : group === 'category'
                 ? categoryLabel(r.label)
                 : r.label,
-        value: Number(r.totalBase),
+        value: Number(r.totalBase), // numeric only for the chart axis / sort
+        base: r.totalBase, // exact wire string for money math + display
         count: r.count,
       }))
       .sort((a, b) =>
@@ -65,7 +66,7 @@ export default function ReportsPage() {
       );
   }, [report.data, group, memberMap, f]);
 
-  const totalDec = rows.reduce((sum, r) => sum.plus(r.value), new Decimal(0));
+  const totalDec = rows.reduce((sum, r) => sum.plus(r.base), new Decimal(0));
   const total = totalDec.toNumber();
   const isTimeSeries = group === 'month';
 
@@ -207,7 +208,7 @@ export default function ReportsPage() {
                         <span className="truncate text-sm font-medium">{r.label}</span>
                       </span>
                       <span className="font-mono text-sm font-semibold tnum">
-                        {f.money(r.value, base)}
+                        {f.money(r.base, base)}
                       </span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
