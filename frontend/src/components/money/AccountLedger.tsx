@@ -35,12 +35,14 @@ export function AccountLedger({
   transactions,
   accountsById,
   onDelete,
+  onEdit,
   deletingId,
 }: {
   account: Account;
   transactions: PersonalTransaction[];
   accountsById: Map<string, Account>;
   onDelete?: (id: string) => void;
+  onEdit?: (tx: PersonalTransaction) => void;
   deletingId?: string | null;
 }) {
   const { t } = useT();
@@ -134,12 +136,22 @@ export function AccountLedger({
                 <span className={tabular('text-sm text-gray-600 dark:text-gray-300')}>
                   {f.money(run, account.currency)}
                 </span>
+                {onEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => onEdit(tx)}
+                    className="ml-2 p-1 text-xs text-gray-400 opacity-100 transition hover:text-amber-600 dark:text-gray-500 sm:text-gray-300 sm:opacity-0 sm:group-hover:opacity-100 dark:sm:text-gray-600"
+                    aria-label={t('accounts.editTransaction')}
+                  >
+                    ✎
+                  </button>
+                ) : null}
                 {onDelete ? (
                   <button
                     type="button"
                     onClick={() => onDelete(tx.id)}
                     disabled={deletingId === tx.id}
-                    className="ml-2 p-1 text-xs text-gray-400 opacity-100 transition hover:text-rose-500 disabled:opacity-50 dark:text-gray-500 sm:text-gray-300 sm:opacity-0 sm:group-hover:opacity-100 dark:sm:text-gray-600"
+                    className="ml-1 p-1 text-xs text-gray-400 opacity-100 transition hover:text-rose-500 disabled:opacity-50 dark:text-gray-500 sm:text-gray-300 sm:opacity-0 sm:group-hover:opacity-100 dark:sm:text-gray-600"
                     aria-label={t('money.deleteTransaction')}
                   >
                     {deletingId === tx.id ? '…' : '✕'}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   accountTypeLabel,
@@ -212,6 +212,7 @@ function SelectedLedger({
   accountsById: Map<string, Account>;
 }) {
   const { t } = useT();
+  const navigate = useNavigate();
   const account = accountsById.get(accountId)!;
   const txs = usePersonalTransactions({ accountId });
   const balance = useAccountBalance(accountId);
@@ -255,6 +256,7 @@ function SelectedLedger({
           transactions={txs.data ?? []}
           accountsById={accountsById}
           deletingId={del.isPending ? del.variables : null}
+          onEdit={(tx) => navigate('/money/add', { state: { editing: tx } })}
           onDelete={(id) => {
             if (window.confirm(t('accounts.deleteConfirm'))) {
               del.mutate(id);

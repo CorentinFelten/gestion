@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Decimal } from 'decimal.js';
 import {
   accountTypeLabel,
@@ -12,7 +12,10 @@ import {
 } from '@/i18n';
 import { usePinnedCurrencyOptions } from '@/hooks/usePinnedCurrencies';
 import { useAccounts } from '@/hooks/useAccounts';
-import { useCreatePersonalTransaction } from '@/hooks/usePersonalTx';
+import {
+  useCreatePersonalTransaction,
+  useUpdatePersonalTransaction,
+} from '@/hooks/usePersonalTx';
 import {
   useFxRate,
   useLinkableSharedTransactions,
@@ -35,40 +38,78 @@ import {
   TextArea,
   TextInput,
 } from '@/components/money/ui';
-import type { CreatePersonalTransactionInput, PersonalTxnType } from '@/types';
+import type {
+  CreatePersonalTransactionInput,
+  PersonalTransaction,
+  PersonalTxnType,
+} from '@/types';
 
 const TODAY = isoToday();
 
 export default function MoneyAddPage() {
   const { t } = useT();
   const f = useFormat();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Edit mode: the row to correct is passed via router state from the ledger.
+  const editing = useMemo(
+    () => (location.state as { editing?: PersonalTransaction } | null)?.editing,
+    [location.state],
+  );
 
   const accounts = useAccounts();
   const create = useCreatePersonalTransaction();
+  const update = useUpdatePersonalTransaction();
   const categories = usePersonalCategories();
 
-  const active = useMemo(
-    () => (accounts.data ?? []).filter((a) => a.isActive),
-    [accounts.data],
-  );
+  // Active accounts, plus the edited transaction's own accounts even if archived
+  // (so an erroneous row on a since-closed account is still editable).
+  const active = useMemo(() => {
+    const all = accounts.data ?? [];
+    const list = all.filter((a) => a.isActive);
+    if (editing) {
+      for (const id of [editing.accountId, editing.transferAccountId]) {
+        if (id && !list.some((a) => a.id === id)) {
+          const acc = all.find((a) => a.id === id);
+          if (acc) list.push(acc);
+        }
+      }
+    }
+    return list;
+  }, [accounts.data, editing]);
 
-  // ── Form state ─────────────────────────────────────────────────────────────
-  const [type, setType] = useState<PersonalTxnType>('expense');
-  const [accountId, setAccountId] = useState('');
-  const [destId, setDestId] = useState('');
-  const [amountInput, setAmountInput] = useState('');
-  const [entryCurrency, setEntryCurrency] = useState('');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferTouched, setTransferTouched] = useState(false);
-  const [categoryId, setCategoryId] = useState('');
-  const [payeeSource, setPayeeSource] = useState('');
-  const [txnDate, setTxnDate] = useState(TODAY);
-  const [notes, setNotes] = useState('');
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [linkedTransactionId, setLinkedTransactionId] = useState('');
+  // ── Form state (prefilled from the edited row when present) ─────────────────
+  const [type, setType] = useState<PersonalTxnType>(editing?.type ?? 'expense');
+  const [accountId, setAccountId] = useState(editing?.accountId ?? '');
+  const [destId, setDestId] = useState(editing?.transferAccountId ?? '');
+  const [amountInput, setAmountInput] = useState(
+    editing
+      ? editing.currencyOriginal && editing.amountOriginal
+        ? editing.amountOriginal
+        : editing.amount
+      : '',
+  );
+  const [entryCurrency, setEntryCurrency] = useState(editing?.currencyOriginal ?? '');
+  const [transferAmount, setTransferAmount] = useState(editing?.transferAmount ?? '');
+  // In edit mode the stored transfer leg is authoritative; treat it as touched
+  // so the FX suggestion doesn't overwrite it.
+  const [transferTouched, setTransferTouched] = useState(!!editing);
+  const [categoryId, setCategoryId] = useState(editing?.categoryId ?? '');
+  const [payeeSource, setPayeeSource] = useState(editing?.payeeSource ?? '');
+  const [txnDate, setTxnDate] = useState(editing?.txnDate ?? TODAY);
+  const [notes, setNotes] = useState(editing?.notes ?? '');
+  const [linkOpen, setLinkOpen] = useState(!!editing?.linkedTransactionId);
+  const [linkedTransactionId, setLinkedTransactionId] = useState(
+    editing?.linkedTransactionId ?? '',
+  );
   const [justSaved, setJustSaved] = useState(false);
 
-  // Default the source account + entry currency once accounts load.
+  // Preserve a foreign entry currency through the first account-sync when editing.
+  const preserveEntryCurrency = useRef(!!editing?.currencyOriginal);
+
+  // Default the source account + entry currency once accounts load (create mode;
+  // in edit mode accountId is already set from the row).
   useEffect(() => {
     if (!accountId && active.length > 0) {
       setAccountId(active[0].id);
@@ -80,16 +121,23 @@ export default function MoneyAddPage() {
   const dest = active.find((a) => a.id === destId);
   const accountCurrency = account?.currency ?? entryCurrency;
 
-  // Keep entry currency aligned to the picked account when it changes.
+  // Keep entry currency aligned to the picked account when it (or its currency)
+  // resolves/changes — but keep the edited row's foreign currency the first time.
   useEffect(() => {
-    if (account) setEntryCurrency(account.currency);
-  }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!account) return;
+    if (preserveEntryCurrency.current) {
+      preserveEntryCurrency.current = false;
+      return;
+    }
+    setEntryCurrency(account.currency);
+  }, [account?.currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── FX: one conversion at a time ─────────────────────────────────────────
   // expense/income → entry currency into the account currency.
   // transfer       → source account currency into the destination currency.
   const isTransfer = type === 'transfer';
-  const foreignEntry = !isTransfer && !!accountCurrency && entryCurrency !== accountCurrency;
+  const foreignEntry =
+    !isTransfer && !!accountCurrency && !!entryCurrency && entryCurrency !== accountCurrency;
   const crossTransfer = isTransfer && !!account && !!dest && account.currency !== dest.currency;
 
   const fxFrom = isTransfer ? account?.currency ?? '' : entryCurrency;
@@ -192,6 +240,27 @@ export default function MoneyAddPage() {
     }
     if (linkedTransactionId) payload.linkedTransactionId = linkedTransactionId;
 
+    if (editing) {
+      // Send explicit nulls so fields the row no longer uses are cleared
+      // (null wins over undefined, which the server treats as "leave unchanged").
+      const patch: Partial<CreatePersonalTransactionInput> = {
+        ...payload,
+        categoryId: categoryId || null,
+        payeeSource: payeeSource.trim() || null,
+        notes: notes.trim() || null,
+        linkedTransactionId: linkedTransactionId || null,
+        amountOriginal: foreignEntry ? amountInput : null,
+        currencyOriginal: foreignEntry ? entryCurrency : null,
+        transferAccountId: isTransfer ? destId : null,
+        transferAmount: isTransfer && crossTransfer && transferAmount ? transferAmount : null,
+      };
+      update.mutate(
+        { id: editing.id, input: patch },
+        { onSuccess: () => navigate('/money/accounts') },
+      );
+      return;
+    }
+
     create.mutate(payload, {
       onSuccess: () => {
         setJustSaved(true);
@@ -221,6 +290,15 @@ export default function MoneyAddPage() {
       : type === 'expense'
         ? t('money.recordExpense')
         : t('money.recordTransfer');
+
+  const busy = editing ? update.isPending : create.isPending;
+  const mutationError = editing
+    ? update.isError
+      ? errorMessage(update.error)
+      : null
+    : create.isError
+      ? errorMessage(create.error)
+      : null;
 
   if (accounts.isLoading) {
     return (
@@ -260,8 +338,8 @@ export default function MoneyAddPage() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         eyebrow={t('money.eyebrow')}
-        title={t('nav.addTransaction')}
-        subtitle={t('money.addSubtitle')}
+        title={editing ? t('money.editTitle') : t('nav.addTransaction')}
+        subtitle={editing ? t('money.editSubtitle') : t('money.addSubtitle')}
       />
 
       {justSaved ? (
@@ -568,19 +646,29 @@ export default function MoneyAddPage() {
             </div>
           ) : null}
 
-          {create.isError ? (
-            <p className="text-sm text-rose-600 dark:text-rose-400">{errorMessage(create.error)}</p>
+          {mutationError ? (
+            <p className="text-sm text-rose-600 dark:text-rose-400">{mutationError}</p>
           ) : null}
 
           <div className="flex flex-col items-start gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:flex-row sm:items-center">
             <Button
               type="submit"
               variant="primary"
-              disabled={!canSubmit || create.isPending}
+              disabled={!canSubmit || busy}
               className="w-full sm:w-auto"
             >
-              {create.isPending ? t('money.saving') : recordLabel}
+              {busy ? t('money.saving') : editing ? t('money.saveChanges') : recordLabel}
             </Button>
+            {editing ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => navigate('/money/accounts')}
+                className="w-full sm:w-auto"
+              >
+                {t('common.cancel')}
+              </Button>
+            ) : null}
             {amountPositive && account ? (
               <span className={tabular('text-sm text-gray-400')}>
                 {typeLabel}{' '}

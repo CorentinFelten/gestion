@@ -59,6 +59,28 @@ export function useCreatePersonalTransaction() {
   });
 }
 
+export function useUpdatePersonalTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: Partial<CreatePersonalTransactionInput>;
+    }) => {
+      const headers = await csrfHeaders();
+      const { data } = await api.patch<PersonalTransaction>(`/me/transactions/${id}`, input, {
+        headers,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+}
+
 export function useDeletePersonalTransaction() {
   const qc = useQueryClient();
   return useMutation({

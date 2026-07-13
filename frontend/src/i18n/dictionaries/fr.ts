@@ -473,6 +473,9 @@ export const fr = {
     deleteTransaction: 'Supprimer la transaction',
     // Add-transaction page
     addSubtitle: 'Enregistrez un revenu, une dépense ou un virement entre vos comptes.',
+    editTitle: 'Modifier la transaction',
+    editSubtitle: 'Corrigez une transaction erronée ; les soldes sont recalculés.',
+    saveChanges: 'Enregistrer les modifications',
     loadingAccounts: 'Chargement de vos comptes…',
     needAccountTitle: 'Créez d’abord un compte',
     needAccountMessage:
@@ -540,6 +543,7 @@ export const fr = {
     ledgerLoading: 'Chargement du relevé…',
     deleteConfirm: 'Supprimer cette transaction ? Cette action est irréversible.',
     deleteError: 'Impossible de supprimer la transaction. Veuillez réessayer.',
+    editTransaction: 'Modifier la transaction',
     archiveError: 'Impossible de mettre à jour le compte. Veuillez réessayer.',
     addToAccount: 'Ajouter une transaction à ce compte',
     shownCountOne: '{{count}} compte affiché',
