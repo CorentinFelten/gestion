@@ -86,11 +86,19 @@ export function SettlementModal({
     e.preventDefault();
     setError(null);
     if (!target) return;
+    // A one-click reset in the base currency must drive the debt to exactly zero.
+    // The outstanding balance can carry sub-cent precision (6 dp) from FX-converted
+    // splits; rounding the paid amount to 2 dp would leave a residual and the
+    // backend would not flag it as a full reset. So submit the exact outstanding.
+    const isBaseFullReset = currency === baseCurrency && isFull;
+    const amountOriginal = isBaseFullReset
+      ? new Decimal(target.outstandingBase).toDecimalPlaces(6).toString()
+      : new Decimal(toNumber(amount)).toDecimalPlaces(minorUnits(currency)).toString();
     const payload: CreateSettlementInput = {
       fromUserId: target.fromUserId,
       toUserId: target.toUserId,
       categoryId: target.categoryId,
-      amountOriginal: new Decimal(toNumber(amount)).toDecimalPlaces(minorUnits(currency)).toString(),
+      amountOriginal,
       currencyOriginal: currency,
       paymentDate: date,
       note: note.trim() || null,
