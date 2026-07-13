@@ -12,7 +12,7 @@ const positiveDecimalString = z
 export const CreateSettlementSchema = z.object({
   fromUserId: z.string().min(1),
   toUserId: z.string().min(1),
-  categoryId: z.string().min(1).nullish(), // null = overall / cross-category
+  categoryId: z.string().min(1).nullish(), // null = the uncategorized bucket (not a cross-category reset)
   amountOriginal: positiveDecimalString,
   currencyOriginal: currencyCode,
   paymentDate: isoDate,
