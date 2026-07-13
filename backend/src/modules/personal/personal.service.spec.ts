@@ -326,6 +326,33 @@ describe('PersonalService, account balance math', () => {
     expect((await service.getAccountBalance(USER_A, savings.id)).balance).toBe('50');
   });
 
+  it('rejects another household\'s shared category on a personal transaction', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    const acc = await service.createAccount(USER_A, {
+      name: 'A', type: 'checking', currency: 'EUR', openingBalance: '0',
+    });
+    // Global personal default (householdId null): allowed.
+    prisma.categories.push({
+      id: 'cat_global', userId: null, householdId: null, scope: 'personal', name: 'Salaire', flow: 'income',
+    });
+    // A different household's SHARED category (userId null, householdId set): must NOT match.
+    prisma.categories.push({
+      id: 'cat_foreign', userId: null, householdId: 'hh_other', scope: 'shared', name: 'Secret', flow: 'expense',
+    });
+
+    await expect(
+      service.createTransaction(USER_A, {
+        accountId: acc.id, type: 'expense', amount: '10', txnDate: today, categoryId: 'cat_foreign',
+      }),
+    ).rejects.toThrow('Category not found');
+
+    const ok = await service.createTransaction(USER_A, {
+      accountId: acc.id, type: 'income', amount: '10', txnDate: today, categoryId: 'cat_global',
+    });
+    expect(ok.categoryId).toBe('cat_global');
+  });
+
   it('stores both legs for a cross-currency transfer (client-supplied leg)', async () => {
     const { service, prisma } = makeService();
     seedUser(prisma, USER_A);

@@ -346,10 +346,20 @@ export class PersonalService {
     return this.txnToDto(created);
   }
 
-  /** Category ownership guard: only global (userId=null) or the user's own. */
+  /**
+   * Category guard for personal transactions: only the user's own personal
+   * categories or the GLOBAL personal defaults. Mirrors listPersonalCategories —
+   * `{ userId: null }` alone would also match other households' shared categories
+   * (which carry userId=null but a non-null householdId), leaking them across
+   * tenants; require householdId=null and a personal-usable scope.
+   */
   private async assertCategory(userId: string, categoryId: string): Promise<void> {
     const category = await this.prisma.category.findFirst({
-      where: { id: categoryId, OR: [{ userId }, { userId: null }] },
+      where: {
+        id: categoryId,
+        scope: { in: ['personal', 'both'] },
+        OR: [{ userId }, { userId: null, householdId: null }],
+      },
     });
     if (!category) {
       throw new NotFoundException('Category not found');
