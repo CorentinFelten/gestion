@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import type { User } from '@prisma/client';
+import { Prisma, type User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionService } from './session.service';
 import type { AuthResultDto, AuthUserDto, LoginDto, RegisterDto } from './dto/auth.dto';
@@ -55,15 +55,25 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(dto.password, ARGON2_OPTIONS);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        displayName: dto.displayName,
-        preferredCurrency: dto.preferredCurrency ?? 'EUR',
-        locale: dto.locale ?? 'fr-FR',
-      },
-    });
+    let user: User;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          passwordHash,
+          displayName: dto.displayName,
+          preferredCurrency: dto.preferredCurrency ?? 'EUR',
+          locale: dto.locale ?? 'fr-FR',
+        },
+      });
+    } catch (e) {
+      // Two concurrent registrations of the same email both pass the pre-check;
+      // the unique constraint rejects the second — return a clean 409, not a 500.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Email already registered');
+      }
+      throw e;
+    }
 
     const session = await this.sessions.create(user.id, meta);
     return {
