@@ -129,10 +129,10 @@ export class InvitesService {
     }));
   }
 
-  /** Revoke a pending invite (owner/admin). */
+  /** Revoke a PENDING invite (owner/admin). Never touches accepted/declined history. */
   async revoke(householdId: string, inviteId: string): Promise<void> {
     const invite = await this.prisma.invite.findUnique({ where: { id: inviteId } });
-    if (!invite || invite.householdId !== householdId) {
+    if (!invite || invite.householdId !== householdId || invite.status !== 'pending') {
       throw new NotFoundException('Invite not found');
     }
     await this.prisma.invite.delete({ where: { id: inviteId } });
