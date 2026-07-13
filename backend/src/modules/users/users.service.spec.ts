@@ -90,3 +90,25 @@ describe('UpdateProfileSchema, pinnedCurrencies validation', () => {
     expect(res.success).toBe(false);
   });
 });
+
+describe('UpdateProfileSchema, avatarUrl scheme validation', () => {
+  it('accepts http(s) URLs', () => {
+    expect(UpdateProfileSchema.safeParse({ avatarUrl: 'https://example.com/a.png' }).success).toBe(
+      true,
+    );
+    expect(UpdateProfileSchema.safeParse({ avatarUrl: 'http://example.com/a.png' }).success).toBe(
+      true,
+    );
+    expect(UpdateProfileSchema.safeParse({ avatarUrl: null }).success).toBe(true);
+  });
+
+  it('rejects javascript:/data:/vbscript: schemes (stored-XSS vector)', () => {
+    for (const url of [
+      'javascript:alert(document.cookie)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+    ]) {
+      expect(UpdateProfileSchema.safeParse({ avatarUrl: url }).success).toBe(false);
+    }
+  });
+});

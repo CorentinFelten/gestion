@@ -28,7 +28,16 @@ const pinnedCurrenciesSchema = z
 export const UpdateProfileSchema = z
   .object({
     displayName: z.string().trim().min(1).max(100).optional(),
-    avatarUrl: z.string().trim().url().max(2048).nullable().optional(),
+    // Restrict to http(s): zod's .url() alone accepts javascript:/data:/vbscript:
+    // URLs, which would be a stored-XSS vector when rendered for other members.
+    avatarUrl: z
+      .string()
+      .trim()
+      .url()
+      .max(2048)
+      .refine((u) => /^https?:\/\//i.test(u), { message: 'avatarUrl must be an http(s) URL' })
+      .nullable()
+      .optional(),
     preferredCurrency: currencySchema.optional(),
     pinnedCurrencies: pinnedCurrenciesSchema.optional(),
     locale: z.string().trim().min(2).max(35).optional(),
