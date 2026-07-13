@@ -21,11 +21,13 @@ import { Button, EmptyBlock, ErrorBlock, LoadingBlock, errorMessage } from './ui
  */
 
 function currentMonthRange(): { from: string; to: string; monthKey: string } {
+  // Use UTC so the range matches the backend's month summary (which buckets in
+  // UTC); local time would disagree near month boundaries in UTC-offset zones.
   const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth(); // 0-indexed
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth(); // 0-indexed
   const pad = (n: number) => String(n).padStart(2, '0');
-  const lastDay = new Date(y, m + 1, 0).getDate();
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   const monthKey = `${y}-${pad(m + 1)}`;
   return {
     from: `${monthKey}-01`,
