@@ -77,8 +77,10 @@ export class FxService {
       return { rate: new Decimal(1), rateDate: dateISO, source: IDENTITY_SOURCE };
     }
 
-    // 1. Cache lookup, exact requested date (resolved dates are cached under
-    //    their own rateDate, so a repeated exact-date query is a guaranteed hit).
+    // 1. Cache lookup, exact requested date. Resolved rates are cached under
+    //    their own (prior business) date, so a weekend/holiday date whose rate
+    //    was frozen under the preceding Friday still misses here and re-queries
+    //    the provider, unless the provider is unreachable (see step 3).
     const cached = await this.prisma.exchangeRate.findFirst({
       where: { base, quote, rateDate: toUtcDate(dateISO) },
       orderBy: { fetchedAt: 'desc' },
@@ -92,11 +94,61 @@ export class FxService {
     }
 
     // 2. Miss, call the provider(s), walking back to the nearest prior rate.
-    const quoteResult = await this.resolveHistorical(base, quote, dateISO);
+    let quoteResult: RateQuote;
+    try {
+      quoteResult = await this.resolveHistorical(base, quote, dateISO);
+    } catch (err) {
+      // 3. Provider chain unreachable. If a rate for a prior business day was
+      //    already frozen in the cache, serve it rather than failing the write:
+      //    the frozen snapshot is correct-by-construction and the whole point of
+      //    the cache is offline tolerance between nightly prefetches.
+      if (err instanceof ServiceUnavailableException) {
+        const priorCached = await this.findNearestCachedRate(base, quote, dateISO);
+        if (priorCached) {
+          this.logger.warn(
+            `FX provider unavailable for ${base}->${quote}@${dateISO}; ` +
+              `serving cached rate frozen ${priorCached.rateDate}`,
+          );
+          return priorCached;
+        }
+      }
+      throw err;
+    }
 
-    // 3. Persist the resolved snapshot and return it.
+    // 4. Persist the resolved snapshot and return it.
     await this.persist(base, quote, quoteResult);
     return { rate: quoteResult.rate, rateDate: quoteResult.rateDate, source: quoteResult.source };
+  }
+
+  /**
+   * Nearest cached rate at or before `dateISO`, scanning back up to
+   * MAX_LOOKBACK_DAYS one day at a time. Used only as an offline fallback when
+   * the provider chain is unreachable: every cached row's `rateDate` is a real
+   * published day, so the nearest prior one is the correct frozen snapshot for a
+   * weekend/holiday date. (On the happy path we always ask the provider so a
+   * genuine trading-day rate is never shadowed by an older cached one.)
+   */
+  private async findNearestCachedRate(
+    base: string,
+    quote: string,
+    dateISO: string,
+  ): Promise<FxRateResult | null> {
+    let cursor = dateISO;
+    for (let i = 0; i <= MAX_LOOKBACK_DAYS; i++) {
+      const row = await this.prisma.exchangeRate.findFirst({
+        where: { base, quote, rateDate: toUtcDate(cursor) },
+        orderBy: { fetchedAt: 'desc' },
+      });
+      if (row) {
+        return {
+          rate: new Decimal(row.rate.toString()),
+          rateDate: dateToISO(row.rateDate),
+          source: row.source,
+        };
+      }
+      cursor = prevDayISO(cursor);
+    }
+    return null;
   }
 
   /**

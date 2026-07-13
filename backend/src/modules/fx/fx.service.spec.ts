@@ -239,6 +239,34 @@ describe('FxService', () => {
         ServiceUnavailableException,
       );
     });
+
+    it('serves a prior-business-day cached rate when the provider is unreachable', async () => {
+      // A rate for Fri 2026-03-13 is already frozen in the cache.
+      repo.rows.push({
+        base: 'USD',
+        quote: 'EUR',
+        rateDate: new Date('2026-03-13T00:00:00.000Z'),
+        rate: '0.918',
+        source: 'frankfurter',
+        fetchedAt: new Date('2026-03-13T02:00:00.000Z'),
+      });
+      // Provider is now down for a Sat 2026-03-14 request (not just a weekend gap).
+      const primary: RateProvider = {
+        name: 'frankfurter',
+        getRate: jest.fn(async (): Promise<RateQuote> => {
+          throw new RateProviderError('network down');
+        }),
+        getLatestRate: jest.fn(),
+      };
+      const svc = new FxService(makePrisma(repo), primary, null);
+
+      const res = await svc.getRate('USD', 'EUR', '2026-03-14');
+
+      // Falls back to Friday's frozen rate instead of 503-ing the write.
+      expect(res.rate.toString()).toBe('0.918');
+      expect(res.rateDate).toBe('2026-03-13');
+      expect(res.source).toBe('frankfurter');
+    });
   });
 
   describe('convert', () => {
