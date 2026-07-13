@@ -163,10 +163,12 @@ export class CategoriesService {
    * orphan history; block it and let the caller keep the bucket instead.
    */
   private async deleteIfUnused(categoryId: string): Promise<void> {
+    // Soft-deleted rows are treated as gone everywhere else (balances, stats,
+    // lists), so a category referenced only by them is genuinely unused.
     const [txns, settlements, personalTxns] = await Promise.all([
-      this.prisma.transaction.count({ where: { categoryId } }),
+      this.prisma.transaction.count({ where: { categoryId, deletedAt: null } }),
       this.prisma.settlement.count({ where: { categoryId } }),
-      this.prisma.personalTransaction.count({ where: { categoryId } }),
+      this.prisma.personalTransaction.count({ where: { categoryId, deletedAt: null } }),
     ]);
     if (txns + settlements + personalTxns > 0) {
       throw new ConflictException('Category is in use and cannot be deleted');
