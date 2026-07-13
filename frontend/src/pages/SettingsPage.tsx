@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -136,6 +136,14 @@ function ProfileSection({ user, currencyList }: { user: User; currencyList: stri
   );
   const [saved, setSaved] = useState(false);
 
+  // The locale dropdown previews app-wide instantly via `setActiveLocale`. If the
+  // user leaves this page without saving, revert the session override to their
+  // persisted locale so an abandoned preview doesn't stick for the whole session.
+  const persistedLocaleRef = useRef<Locale>(locale);
+  useEffect(() => {
+    return () => setActiveLocale(persistedLocaleRef.current);
+  }, [setActiveLocale]);
+
   const localeLabel: Record<Locale, string> = {
     'fr-FR': t('settings.regionFrance'),
     'fr-CA': t('settings.regionCanada'),
@@ -156,7 +164,12 @@ function ProfileSection({ user, currencyList }: { user: User; currencyList: stri
         preferredCurrency,
         locale,
       },
-      { onSuccess: () => setSaved(true) },
+      {
+        onSuccess: () => {
+          setSaved(true);
+          persistedLocaleRef.current = locale; // saved: keep the preview on unmount
+        },
+      },
     );
   }
 
