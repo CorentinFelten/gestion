@@ -304,6 +304,28 @@ describe('PersonalService, account balance math', () => {
     expect(savingsBal.balance).toBe('20');
   });
 
+  it('editing a transfer amount recomputes the destination leg (no desync)', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    const checking = await service.createAccount(USER_A, {
+      name: 'Checking', type: 'checking', currency: 'EUR', openingBalance: '100',
+    });
+    const savings = await service.createAccount(USER_A, {
+      name: 'Savings', type: 'savings', currency: 'EUR', openingBalance: '0',
+    });
+    const tx = await service.createTransaction(USER_A, {
+      accountId: checking.id, type: 'transfer', amount: '20',
+      transferAccountId: savings.id, txnDate: today,
+    });
+
+    // Bump ONLY the amount; the incoming leg must follow, not stay at 20.
+    await service.updateTransaction(USER_A, tx.id, { amount: '50' });
+
+    // 100 − 50 = 50 ; savings 0 + 50 = 50 (would be +20 if the leg desynced).
+    expect((await service.getAccountBalance(USER_A, checking.id)).balance).toBe('50');
+    expect((await service.getAccountBalance(USER_A, savings.id)).balance).toBe('50');
+  });
+
   it('stores both legs for a cross-currency transfer (client-supplied leg)', async () => {
     const { service, prisma } = makeService();
     seedUser(prisma, USER_A);

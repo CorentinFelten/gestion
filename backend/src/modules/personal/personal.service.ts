@@ -259,6 +259,9 @@ export class PersonalService {
       if (!dto.transferAccountId) {
         throw new BadRequestException('transfer requires transferAccountId');
       }
+      if (dto.transferAccountId === account.id) {
+        throw new BadRequestException('cannot transfer to the same account');
+      }
       const dest = await this.assertAccount(userId, dto.transferAccountId);
       if (account.currency === dest.currency) {
         result.transferAmount = dto.transferAmount ? this.dec(dto.transferAmount) : result.amount;
@@ -445,12 +448,12 @@ export class PersonalService {
           dto.transferAccountId !== undefined
             ? dto.transferAccountId
             : existing.transferAccountId,
-        transferAmount:
-          dto.transferAmount !== undefined
-            ? dto.transferAmount
-            : existing.transferAmount !== null
-              ? this.dec(existing.transferAmount).toString()
-              : null,
+        // Only honor an explicitly-supplied transferAmount. Carrying forward the
+        // stored one would desync the destination leg when the source amount /
+        // currency / date changes (resolveAmounts treats a present transferAmount
+        // as authoritative and never recomputes it) — leaving `undefined` forces a
+        // fresh recompute of the converted leg.
+        transferAmount: dto.transferAmount !== undefined ? dto.transferAmount : undefined,
       };
       // If the caller passes a fresh `amount` but no original entry, use it directly.
       if (dto.amount !== undefined && dto.amountOriginal === undefined && merged.amountOriginal === null) {
