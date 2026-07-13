@@ -616,6 +616,9 @@ export class PersonalService {
     });
 
     const rateCache = new Map<string, Decimal>();
+    // Net worth is only as fresh as its stalest input rate: start at today (the
+    // ceiling, correct when nothing needs converting) and pull `asOf` back to the
+    // oldest latest-rate date actually used (e.g. Friday's rate over a weekend).
     let asOf = new Date().toISOString().slice(0, 10);
     let total = new Decimal(0);
     const breakdown: NetWorthAccountDto[] = [];
@@ -632,7 +635,7 @@ export class PersonalService {
           const r = await this.fx.getLatestRate(account.currency, profileCurrency);
           rate = r.rate;
           rateCache.set(account.currency, rate);
-          if (r.rateDate > asOf) asOf = r.rateDate;
+          if (r.rateDate < asOf) asOf = r.rateDate;
         }
         converted = native.mul(rate).toDecimalPlaces(6);
       }
