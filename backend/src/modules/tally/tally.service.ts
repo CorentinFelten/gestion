@@ -123,6 +123,22 @@ export class TallyService {
       : ledger.netCat(userU, userV, categoryId);
   }
 
+  /**
+   * net of the single category BUCKET a settlement targets. A null categoryId
+   * maps to the uncategorized bucket (matching how settlements are applied),
+   * NOT the overall net across categories like `netPair(..., null)` — a
+   * category-scoped settlement only ever moves its own bucket.
+   */
+  async netCategoryBucket(
+    householdId: string,
+    userU: string,
+    userV: string,
+    categoryId: string | null,
+  ): Promise<Decimal> {
+    const { ledger } = await this.load(householdId);
+    return ledger.netCat(userU, userV, categoryId ?? NULL_CATEGORY_KEY);
+  }
+
   // ── tally board ────────────────────────────────────────────────────────────
   async getTally(
     householdId: string,

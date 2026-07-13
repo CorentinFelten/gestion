@@ -130,9 +130,12 @@ export class SettlementsService {
     );
     const amountBase = roundMoney(fx.amount);
 
-    // Outstanding BEFORE this settlement: net_pair(from,to,category).
-    // Positive ⇒ `from` owes `to` (correct reset direction).
-    const outstanding = await this.tally.netPair(
+    // Outstanding BEFORE this settlement in the bucket it targets (null →
+    // uncategorized). Positive ⇒ `from` owes `to` (correct reset direction).
+    // Must be the bucket net, not the overall: a null-category settlement only
+    // moves the uncategorized bucket, so isFullReset/directionWarning have to be
+    // judged against that bucket, not the sum across every category.
+    const outstanding = await this.tally.netCategoryBucket(
       householdId,
       dto.fromUserId,
       dto.toUserId,
@@ -195,8 +198,8 @@ export class SettlementsService {
     });
     if (!household) throw new NotFoundException('Household not found');
 
-    // net_pair(from,to,category): positive ⇒ from owes to (the exact reset amount).
-    const outstanding = await this.tally.netPair(
+    // Bucket net (null → uncategorized): positive ⇒ from owes to (the exact reset amount).
+    const outstanding = await this.tally.netCategoryBucket(
       householdId,
       fromUserId,
       toUserId,

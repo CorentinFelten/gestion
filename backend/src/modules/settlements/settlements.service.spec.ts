@@ -62,6 +62,7 @@ describe('SettlementsService.create', () => {
 
     const tally = {
       netPair: jest.fn().mockResolvedValue(new Decimal(opts.outstanding)),
+      netCategoryBucket: jest.fn().mockResolvedValue(new Decimal(opts.outstanding)),
     } as unknown as TallyService;
 
     return { service: new SettlementsService(prisma, fx, tally), fx, prisma };
