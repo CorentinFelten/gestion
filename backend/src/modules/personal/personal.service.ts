@@ -7,7 +7,7 @@ import { Decimal } from 'decimal.js';
 import type { Account, PersonalTransaction, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FxService } from '../fx/fx.service';
-import { dateToISO, toUtcDate } from '../fx/date.util';
+import { dateToISO, todayISO, toUtcDate } from '../fx/date.util';
 import type {
   AccountBalanceDto,
   AccountDto,
@@ -309,10 +309,22 @@ export class PersonalService {
     return result;
   }
 
+  /**
+   * Reject a future transaction date, matching the shared ledger (a payment
+   * cannot have happened yet). Applies to same-currency entries too, which never
+   * touch the FX layer and would otherwise be silently accepted.
+   */
+  private assertNotFutureDate(txnDate: string): void {
+    if (txnDate > todayISO()) {
+      throw new BadRequestException('txnDate cannot be in the future');
+    }
+  }
+
   async createTransaction(
     userId: string,
     dto: CreatePersonalTransactionDto,
   ): Promise<PersonalTransactionDto> {
+    this.assertNotFutureDate(dto.txnDate);
     const account = await this.assertAccount(userId, dto.accountId);
     if (dto.categoryId) await this.assertCategory(userId, dto.categoryId);
     await this.assertLinkedRefs(userId, {
@@ -415,6 +427,7 @@ export class PersonalService {
     if (!existing) {
       throw new NotFoundException('Transaction not found');
     }
+    if (dto.txnDate !== undefined) this.assertNotFutureDate(dto.txnDate);
     if (dto.categoryId) await this.assertCategory(userId, dto.categoryId);
     await this.assertLinkedRefs(userId, {
       linkedTransactionId: dto.linkedTransactionId,
