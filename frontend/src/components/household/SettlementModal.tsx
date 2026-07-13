@@ -158,7 +158,7 @@ export function SettlementModal({
                 <>
                   ≈{' '}
                   <span className="font-mono tnum">{f.money(clears, baseCurrency)}</span>{' '}
-                  <CurrencyBadge code={baseCurrency} /> @ {fxPreview.rate}
+                  <CurrencyBadge code={baseCurrency} /> @ {f.number(fxPreview.rate, { maximumFractionDigits: 6 })}
                 </>
               ) : (
                 <span className="text-amber-600">{t('settleUp.rateResolved')}</span>
