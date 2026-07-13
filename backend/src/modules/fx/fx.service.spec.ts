@@ -22,9 +22,12 @@ class FakeExchangeRateRepo {
     let matches = this.rows.filter(
       (r) => r.base === where.base && r.quote === where.quote,
     );
-    if (where.rateDate) {
+    if (where.rateDate instanceof Date) {
       const target = where.rateDate.getTime();
       matches = matches.filter((r) => r.rateDate.getTime() === target);
+    } else if (where.rateDate?.gte) {
+      const gte = where.rateDate.gte.getTime();
+      matches = matches.filter((r) => r.rateDate.getTime() >= gte);
     }
     if (where.fetchedAt?.gte) {
       const gte = where.fetchedAt.gte.getTime();
@@ -278,6 +281,25 @@ describe('FxService', () => {
       const second = await svc.getLatestRate('USD', 'EUR');
       expect(second.rate.toString()).toBe('0.95');
       // Cached today -> no second provider call.
+      expect(primary.getLatestRate).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a same-day HISTORICAL row and fetches the real latest rate', async () => {
+      // A historical getRate persisted today stamps fetchedAt=now but an old
+      // rateDate; it must not be served as the current rate for net worth.
+      repo.rows.push({
+        base: 'USD',
+        quote: 'EUR',
+        rateDate: new Date('2020-06-12T00:00:00.000Z'),
+        rate: '0.5',
+        source: 'frankfurter',
+        fetchedAt: new Date(),
+      });
+      const primary = staticProvider('frankfurter', 0.95);
+      const svc = new FxService(makePrisma(repo), primary, null);
+
+      const res = await svc.getLatestRate('USD', 'EUR');
+      expect(res.rate.toString()).toBe('0.95'); // provider's latest, not the 0.5 historical
       expect(primary.getLatestRate).toHaveBeenCalledTimes(1);
     });
   });

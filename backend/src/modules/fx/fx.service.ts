@@ -130,11 +130,21 @@ export class FxService {
       return { rate: new Decimal(1), rateDate: todayISO(), source: IDENTITY_SOURCE };
     }
 
-    // Cache: reuse any row already fetched today (keeps net-worth reads cheap
-    // and offline-tolerant between nightly prefetches).
+    // Cache: reuse any CURRENT-rate row already fetched today (keeps net-worth
+    // reads cheap and offline-tolerant between nightly prefetches). A historical
+    // getRate() for the same pair also stamps fetchedAt=now but with an old
+    // rateDate; bound rateDate to the recent past so such a row can't masquerade
+    // as the latest rate (which would silently misvalue net worth).
     const startOfToday = toUtcDate(todayISO());
+    const recentCutoff = new Date(startOfToday);
+    recentCutoff.setUTCDate(recentCutoff.getUTCDate() - MAX_LOOKBACK_DAYS);
     const cached = await this.prisma.exchangeRate.findFirst({
-      where: { base, quote, fetchedAt: { gte: startOfToday } },
+      where: {
+        base,
+        quote,
+        fetchedAt: { gte: startOfToday },
+        rateDate: { gte: recentCutoff },
+      },
       orderBy: { rateDate: 'desc' },
     });
     if (cached) {
