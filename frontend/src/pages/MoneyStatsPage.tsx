@@ -7,6 +7,7 @@ import { useNetWorth } from '@/hooks/useNetWorth';
 import {
   BreakdownChart,
   CashflowChart,
+  CategoryPieChart,
   IncomeTimelineChart,
   NetWorthTrendChart,
 } from '@/components/money/charts';
@@ -84,19 +85,27 @@ export default function MoneyStatsPage() {
           <ChartSection
             title={t('stats.spendingByCategory')}
             query={byCategory}
-            isEmpty={(d) => d.points.length === 0}
+            isEmpty={(d) => d.points.every((p) => Number(p.expense ?? 0) <= 0)}
           >
-            {(d) => <BreakdownChart points={d.points} currency={currency} />}
+            {(d) => <CategoryPieChart points={d.points} currency={currency} metric="expense" />}
           </ChartSection>
 
           <ChartSection
-            title={t('stats.spendingByAccount')}
-            query={byAccount}
-            isEmpty={(d) => d.points.length === 0}
+            title={t('stats.incomeByCategory')}
+            query={byCategory}
+            isEmpty={(d) => d.points.every((p) => Number(p.income ?? 0) <= 0)}
           >
-            {(d) => <BreakdownChart points={d.points} currency={currency} />}
+            {(d) => <CategoryPieChart points={d.points} currency={currency} metric="income" />}
           </ChartSection>
         </div>
+
+        <ChartSection
+          title={t('stats.spendingByAccount')}
+          query={byAccount}
+          isEmpty={(d) => d.points.length === 0}
+        >
+          {(d) => <BreakdownChart points={d.points} currency={currency} />}
+        </ChartSection>
 
         <ChartSection
           title={`${t('stats.incomeTimeline')} · ${t('stats.whenPaid')}`}

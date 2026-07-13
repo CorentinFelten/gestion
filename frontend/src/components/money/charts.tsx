@@ -6,6 +6,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -281,6 +284,69 @@ export function BreakdownChart({
           ))}
         </Bar>
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ── Category donut (spending or income share per category) ───────────────────
+export function CategoryPieChart({
+  points,
+  currency,
+  metric,
+}: {
+  points: StatsPoint[];
+  currency: string;
+  /** Which side of each category bucket to chart: expense (spending) or income. */
+  metric: 'income' | 'expense';
+}) {
+  const theme = useChartTheme();
+  const data = points
+    .map((p) => ({
+      label: p.label || p.key,
+      fullLabel: p.label || p.key,
+      value: Math.abs(toNumber(metric === 'income' ? p.income : p.expense)),
+    }))
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  // Nothing to plot for this metric (e.g. income pie with no categorized income).
+  if (data.length === 0) return null;
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+        <Pie
+          data={data}
+          dataKey="value"
+          nameKey="label"
+          cx="50%"
+          cy="50%"
+          innerRadius={62}
+          outerRadius={100}
+          paddingAngle={data.length > 1 ? 1.5 : 0}
+          stroke={theme.tooltipBg}
+          strokeWidth={2}
+        >
+          {data.map((_, i) => (
+            <Cell key={i} fill={QUALITATIVE[i % QUALITATIVE.length]} />
+          ))}
+        </Pie>
+        <Legend
+          iconType="circle"
+          iconSize={8}
+          wrapperStyle={{ fontSize: 12, color: theme.axis }}
+        />
+        <Tooltip
+          content={(p) => (
+            <MoneyTooltip
+              active={p.active}
+              payload={p.payload as unknown as TooltipEntry[]}
+              currency={currency}
+              theme={theme}
+            />
+          )}
+        />
+      </PieChart>
     </ResponsiveContainer>
   );
 }

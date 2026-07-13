@@ -570,6 +570,7 @@ export const fr = {
     netWorthNote:
       'Estimation à partir des flux enregistrés, ancrée sur votre patrimoine net actuel. Le total courant utilise le dernier taux de change ; les points antérieurs sont approximatifs.',
     spendingByCategory: 'Dépenses par catégorie',
+    incomeByCategory: 'Revenus par catégorie',
     spendingByAccount: 'Dépenses par compte',
     whenPaid: 'quand avez-vous été payé',
     spending: 'Dépenses',
