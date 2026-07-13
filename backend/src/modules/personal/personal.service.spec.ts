@@ -564,6 +564,35 @@ describe('PersonalService, transactions & stats', () => {
     expect(await service.listTransactions(USER_A, { payee: 'acme' })).toHaveLength(1);
   });
 
+  it('filters transactions by account, and includes the incoming transfer leg', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    const checking = await service.createAccount(USER_A, {
+      name: 'Checking', type: 'checking', currency: 'EUR', openingBalance: '0',
+    });
+    const savings = await service.createAccount(USER_A, {
+      name: 'Savings', type: 'savings', currency: 'EUR', openingBalance: '0',
+    });
+    await service.createTransaction(USER_A, {
+      accountId: checking.id, type: 'income', amount: '3000', txnDate: today,
+    });
+    await service.createTransaction(USER_A, {
+      accountId: savings.id, type: 'income', amount: '500', txnDate: today,
+    });
+    await service.createTransaction(USER_A, {
+      accountId: checking.id, type: 'transfer', amount: '200',
+      transferAccountId: savings.id, txnDate: today,
+    });
+
+    // Checking sees its own income + the outgoing transfer leg.
+    expect(await service.listTransactions(USER_A, { accountId: checking.id })).toHaveLength(2);
+    // Savings sees its own income + the *incoming* transfer leg (transferAccountId).
+    expect(await service.listTransactions(USER_A, { accountId: savings.id })).toHaveLength(2);
+    // Filtering never leaks the other account's non-transfer postings.
+    const savingsTxs = await service.listTransactions(USER_A, { accountId: savings.id });
+    expect(savingsTxs.some((t) => t.type === 'income' && t.amount === '3000')).toBe(false);
+  });
+
   it('summary reports this-month income, spending and savings rate', async () => {
     const { service, prisma } = makeService();
     seedUser(prisma, USER_A, 'EUR');

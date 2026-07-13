@@ -24,9 +24,9 @@ export interface PersonalTxFilters {
 
 function toParams(filters: PersonalTxFilters): Record<string, string> {
   const params: Record<string, string> = {};
-  if (filters.accountId) params.account = filters.accountId;
+  if (filters.accountId) params.accountId = filters.accountId;
   if (filters.type) params.type = filters.type;
-  if (filters.categoryId) params.category = filters.categoryId;
+  if (filters.categoryId) params.categoryId = filters.categoryId;
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;
   if (filters.search) params.search = filters.search;

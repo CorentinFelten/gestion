@@ -520,8 +520,18 @@ export class PersonalService {
   ): Promise<PersonalTransactionDto[]> {
     const where: Prisma.PersonalTransactionWhereInput = { userId, deletedAt: null };
 
+    const and: Prisma.PersonalTransactionWhereInput[] = [];
+
     if (filter.type) where.type = filter.type;
-    if (filter.accountId) where.accountId = filter.accountId;
+    if (filter.accountId) {
+      // Match either leg: a posting on the account itself, or the incoming leg
+      // of a transfer whose destination is this account (mirrors the balance
+      // query and AccountLedger's per-leg delta). Filtering on accountId alone
+      // would hide transfers *into* the account from its ledger.
+      and.push({
+        OR: [{ accountId: filter.accountId }, { transferAccountId: filter.accountId }],
+      });
+    }
     if (filter.categoryId) where.categoryId = filter.categoryId;
     if (filter.from || filter.to) {
       where.txnDate = {};
@@ -532,11 +542,15 @@ export class PersonalService {
       where.payeeSource = { contains: filter.payee, mode: 'insensitive' };
     }
     if (filter.search) {
-      where.OR = [
-        { payeeSource: { contains: filter.search, mode: 'insensitive' } },
-        { notes: { contains: filter.search, mode: 'insensitive' } },
-      ];
+      and.push({
+        OR: [
+          { payeeSource: { contains: filter.search, mode: 'insensitive' } },
+          { notes: { contains: filter.search, mode: 'insensitive' } },
+        ],
+      });
     }
+
+    if (and.length > 0) where.AND = and;
 
     const rows = await this.prisma.personalTransaction.findMany({
       where,
