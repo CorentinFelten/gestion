@@ -163,7 +163,7 @@ export default function MoneyAccountsPage() {
 
                     <button
                       type="button"
-                      onClick={() => updateAccount.mutate({ id: acc.id, archive: acc.isActive })}
+                      onClick={() => updateAccount.mutate({ id: acc.id, isActive: !acc.isActive })}
                       disabled={updateAccount.isPending}
                       className="rounded-md px-2 py-1 text-xs font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                     >

@@ -29,8 +29,8 @@ export interface CreateAccountInput {
 
 export interface UpdateAccountInput {
   name?: string;
-  /** Set to true to archive (soft close) the account. */
-  archive?: boolean;
+  /** `false` archives (soft-closes) the account; `true` restores it. */
+  isActive?: boolean;
   sortOrder?: number;
   country?: Country;
 }
