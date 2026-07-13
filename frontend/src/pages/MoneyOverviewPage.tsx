@@ -5,6 +5,7 @@ import { useFormat, useT } from '@/i18n';
 import { useNetWorth } from '@/hooks/useNetWorth';
 import { useStatsSummary } from '@/hooks/usePersonalStats';
 import { NetWorthStatement } from '@/components/money/NetWorthStatement';
+import { MonthTransactions } from '@/components/money/MonthTransactions';
 import { MoneyAmount } from '@/components/money/MoneyAmount';
 import {
   Button,
@@ -155,6 +156,23 @@ export default function MoneyOverviewPage() {
             {t('money.figuresNote', { currency: profileCurrency })}
           </p>
         ) : null}
+      </div>
+
+      {/* Current-month transactions, scrollable overview across all accounts */}
+      <div className="mt-8">
+        <SectionTitle
+          aside={
+            <Link
+              to="/money/add"
+              className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+            >
+              + {t('nav.addTransaction')}
+            </Link>
+          }
+        >
+          {t('money.monthTxTitle')}
+        </SectionTitle>
+        <MonthTransactions />
       </div>
     </div>
   );

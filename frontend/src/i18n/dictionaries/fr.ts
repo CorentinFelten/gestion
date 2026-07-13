@@ -446,6 +446,13 @@ export const fr = {
     netThisMonth: 'Solde du mois',
     noActivityTitle: 'Aucune activité ce mois-ci',
     noActivityMessage: 'Enregistrez un revenu ou une dépense pour voir votre flux mensuel.',
+    // Current-month transactions list (overview)
+    monthTxTitle: 'Transactions du mois',
+    monthTxLoading: 'Chargement des transactions…',
+    monthTxEmptyTitle: 'Aucune transaction ce mois-ci',
+    monthTxEmptyMessage: 'Vos revenus, dépenses et virements du mois apparaîtront ici.',
+    monthTxCountOne: '{{count}} transaction',
+    monthTxCountOther: '{{count}} transactions',
     figuresNote:
       'Montants affichés en {{currency}}. Taux d’épargne = (revenus − dépenses) ÷ revenus.',
     // Net-worth statement
