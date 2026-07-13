@@ -28,9 +28,13 @@ export class ErApiProvider implements RateProvider {
     private readonly timeoutMs: number = Number(process.env.FX_HTTP_TIMEOUT_MS ?? 8000),
   ) {}
 
-  // Historical not supported on the free tier, best-effort latest.
-  async getRate(from: string, to: string, _date: string): Promise<RateQuote> {
-    return this.latest(from, to);
+  // Historical not supported on the free tier, best-effort latest. When used to
+  // freeze a PAST date, tag the source `erapi-latest` so the degraded rate is
+  // auditable in exchange_rates and not silently indistinguishable from a real
+  // historical rate.
+  async getRate(from: string, to: string, date: string): Promise<RateQuote> {
+    const quote = await this.latest(from, to);
+    return date < todayISO() ? { ...quote, source: `${this.name}-latest` } : quote;
   }
 
   async getLatestRate(from: string, to: string): Promise<RateQuote> {
