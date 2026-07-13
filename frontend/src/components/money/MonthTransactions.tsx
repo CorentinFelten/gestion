@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  accountTypeLabel,
   categoryLabel,
   personalTxTypeLabel,
   useFormat,
@@ -107,10 +108,13 @@ export function MonthTransactions() {
           const delta = signedAmountForType(tx.type, tx.amount);
           const flow = tx.type === 'income' ? 'income' : 'expense';
 
-          // Meta line: date · account · (category, unless already the title).
+          // Meta line: date · account (name + type) · (category, unless the title).
+          const accountLabel = account
+            ? `${account.name} · ${accountTypeLabel(account.type)}`
+            : null;
           const meta = [
             f.date(tx.txnDate),
-            account?.name,
+            accountLabel,
             categoryName && primary !== categoryLabel(categoryName)
               ? categoryLabel(categoryName)
               : null,
