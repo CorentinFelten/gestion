@@ -14,7 +14,10 @@ export function NetWorthStatement({ data }: { data: NetWorth }) {
   const { t, plural } = useT();
   const f = useFormat();
   const negativeTotal = isNegative(data.total);
-  const multiCurrency = new Set(data.accounts.map((a) => a.nativeCurrency)).size > 1;
+  // A conversion happens (and the "in <profile currency>" column is meaningful)
+  // whenever any account is held in a currency other than the profile one, even
+  // if every account shares that single foreign currency.
+  const hasConversion = data.accounts.some((a) => a.nativeCurrency !== data.profileCurrency);
 
   return (
     <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
@@ -40,7 +43,7 @@ export function NetWorthStatement({ data }: { data: NetWorth }) {
                 other: t('money.accountCountOther'),
               })}{' '}
               · {t('money.valuedIn', { currency: data.profileCurrency })}
-              {multiCurrency ? ` ${t('money.atLatestRate')}` : ''}
+              {hasConversion ? ` ${t('money.atLatestRate')}` : ''}
             </p>
           </div>
         </div>
@@ -57,7 +60,7 @@ export function NetWorthStatement({ data }: { data: NetWorth }) {
         </div>
         <ul className="divide-y divide-gray-100 dark:divide-gray-800">
           {data.accounts.map((acc) => {
-            const converted = multiCurrency && acc.nativeCurrency !== data.profileCurrency;
+            const converted = hasConversion && acc.nativeCurrency !== data.profileCurrency;
             return (
               <li
                 key={acc.accountId}
