@@ -77,7 +77,12 @@ export function SettlementModal({
         : null;
 
   const clears = baseEquiv ?? 0;
-  const isFull = baseEquiv !== null && Math.abs(clears - outstanding) < 0.005;
+  // Only a base-currency payment can drive the debt to *exactly* zero (submitted
+  // as the exact outstanding, see `submit`). A foreign amount is rounded to its
+  // minor units, which can leave a sub-cent residual, so it must not be labelled
+  // as a full "reset to zero" even when its converted value lands on the total.
+  const isFull =
+    currency === baseCurrency && baseEquiv !== null && Math.abs(clears - outstanding) < 0.005;
   const remaining = baseEquiv !== null ? Math.max(0, outstanding - clears) : outstanding;
 
   if (!target) return null;
