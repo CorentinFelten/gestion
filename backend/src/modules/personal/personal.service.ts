@@ -13,10 +13,16 @@ import type {
   AccountDto,
   CreateAccountDto,
   CreatePersonalTransactionDto,
+  CreateSavedFilterDto,
   NetWorthAccountDto,
   NetWorthDto,
+  NetWorthHistoryDto,
+  NetWorthSnapshotDto,
+  PayoffMonthDto,
+  PayoffScheduleDto,
   PersonalTransactionDto,
   PersonalTransactionFilter,
+  SavedFilterDto,
   StatsPeriod,
   StatsPoint,
   StatsResponseDto,
@@ -98,6 +104,9 @@ export class PersonalService {
       archivedAt: a.archivedAt ? a.archivedAt.toISOString() : null,
       sortOrder: a.sortOrder,
       createdAt: a.createdAt.toISOString(),
+      interestRate: a.interestRate !== null ? this.dec(a.interestRate).toString() : null,
+      creditLimit: a.creditLimit !== null ? this.dec(a.creditLimit).toString() : null,
+      minPayment: a.minPayment !== null ? this.dec(a.minPayment).toString() : null,
     };
   }
 
@@ -148,6 +157,9 @@ export class PersonalService {
         country,
         openingBalance: this.dec(dto.openingBalance ?? '0').toString(),
         sortOrder: dto.sortOrder ?? 0,
+        interestRate: dto.interestRate != null ? this.dec(dto.interestRate).toString() : null,
+        creditLimit: dto.creditLimit != null ? this.dec(dto.creditLimit).toString() : null,
+        minPayment: dto.minPayment != null ? this.dec(dto.minPayment).toString() : null,
       },
     });
     return this.accountToDto(account);
@@ -172,6 +184,16 @@ export class PersonalService {
     if (dto.isActive !== undefined) {
       data.isActive = dto.isActive;
       data.archivedAt = dto.isActive ? null : new Date();
+    }
+    // Credit metadata: `null` clears the field, a value sets it.
+    if (dto.interestRate !== undefined) {
+      data.interestRate = dto.interestRate === null ? null : this.dec(dto.interestRate).toString();
+    }
+    if (dto.creditLimit !== undefined) {
+      data.creditLimit = dto.creditLimit === null ? null : this.dec(dto.creditLimit).toString();
+    }
+    if (dto.minPayment !== undefined) {
+      data.minPayment = dto.minPayment === null ? null : this.dec(dto.minPayment).toString();
     }
 
     const account = await this.prisma.account.update({
@@ -231,6 +253,89 @@ export class PersonalService {
       accountId: account.id,
       currency: account.currency,
       balance: balance.toString(),
+    };
+  }
+
+  /**
+   * Credit-card payoff projection (#9): amortize the current debt in the
+   * account's native currency at its APR, paying `monthlyPayment` each month
+   * (interest first, then principal). All math is decimal.js; interest and
+   * principal are rounded to 2 dp per month like a real statement.
+   *
+   * A credit account carrying spend has a NEGATIVE balance, so the amount owed
+   * is `-balance`. If the payment doesn't cover the first month's interest the
+   * balance never shrinks (`neverPaysOff`); the simulation is also capped so a
+   * pathological input can't loop forever.
+   */
+  private static readonly PAYOFF_MAX_MONTHS = 1200;
+
+  async getPayoffSchedule(
+    userId: string,
+    accountId: string,
+    monthlyPaymentStr: string,
+  ): Promise<PayoffScheduleDto> {
+    const account = await this.assertAccount(userId, accountId);
+    if (account.type !== 'credit_card') {
+      throw new BadRequestException('Payoff projection is only available for credit-card accounts');
+    }
+    const monthlyPayment = this.dec(monthlyPaymentStr);
+    const balanceNative = await this.computeBalance(userId, account);
+    const owed = balanceNative.isNegative() ? balanceNative.negated() : new Decimal(0);
+    const apr = account.interestRate !== null ? this.dec(account.interestRate) : new Decimal(0);
+    const monthlyRate = apr.div(100).div(12);
+
+    const base = {
+      accountId: account.id,
+      currency: account.currency,
+      startingBalance: owed.toDecimalPlaces(2).toString(),
+      monthlyPayment: monthlyPayment.toDecimalPlaces(2).toString(),
+      interestRate: apr.toString(),
+    };
+
+    if (owed.lte(0)) {
+      return { ...base, months: 0, totalInterest: '0', totalPaid: '0', neverPaysOff: false, schedule: [] };
+    }
+    if (monthlyPayment.lte(owed.mul(monthlyRate))) {
+      // Payment never even covers the interest → the debt can't be cleared.
+      return { ...base, months: 0, totalInterest: '0', totalPaid: '0', neverPaysOff: true, schedule: [] };
+    }
+
+    const schedule: PayoffMonthDto[] = [];
+    let balance = owed;
+    let totalInterest = new Decimal(0);
+    let totalPaid = new Decimal(0);
+    let month = 0;
+    while (balance.gt(0) && month < PersonalService.PAYOFF_MAX_MONTHS) {
+      month += 1;
+      const interest = balance.mul(monthlyRate).toDecimalPlaces(2);
+      const due = balance.plus(interest);
+      let payment = monthlyPayment;
+      let principal: Decimal;
+      if (payment.gte(due)) {
+        payment = due; // final (partial) payment
+        principal = balance;
+        balance = new Decimal(0);
+      } else {
+        principal = payment.minus(interest);
+        balance = balance.minus(principal);
+      }
+      totalInterest = totalInterest.plus(interest);
+      totalPaid = totalPaid.plus(payment);
+      schedule.push({
+        month,
+        interest: interest.toString(),
+        principal: principal.toDecimalPlaces(2).toString(),
+        balance: balance.toDecimalPlaces(2).toString(),
+      });
+    }
+    const neverPaysOff = balance.gt(0);
+    return {
+      ...base,
+      months: neverPaysOff ? 0 : month,
+      totalInterest: totalInterest.toDecimalPlaces(2).toString(),
+      totalPaid: totalPaid.toDecimalPlaces(2).toString(),
+      neverPaysOff,
+      schedule: neverPaysOff ? [] : schedule,
     };
   }
 
@@ -575,6 +680,12 @@ export class PersonalService {
         ],
       });
     }
+    if (filter.minAmount || filter.maxAmount) {
+      const amount: Prisma.DecimalFilter = {};
+      if (filter.minAmount) amount.gte = this.dec(filter.minAmount).toString();
+      if (filter.maxAmount) amount.lte = this.dec(filter.maxAmount).toString();
+      where.amount = amount;
+    }
 
     if (and.length > 0) where.AND = and;
 
@@ -657,6 +768,90 @@ export class PersonalService {
       asOf,
       accounts: breakdown,
     };
+  }
+
+  // ── Net-worth history (#3) ──────────────────────────────────────────────────
+  /**
+   * Freeze today's net worth into a daily snapshot so the trend survives (live
+   * net worth is recomputed every read and would otherwise leave no history).
+   * Idempotent: one row per user per calendar day (upsert). Called on demand and
+   * by the nightly NetWorthSnapshotScheduler.
+   */
+  async captureNetWorthSnapshot(userId: string, dateISO?: string): Promise<NetWorthSnapshotDto> {
+    const nw = await this.getNetWorth(userId);
+    const snapshotDate = toUtcDate(dateISO ?? todayISO());
+    const snap = await this.prisma.netWorthSnapshot.upsert({
+      where: { userId_snapshotDate: { userId, snapshotDate } },
+      create: { userId, snapshotDate, currency: nw.profileCurrency, totalBase: nw.total },
+      update: { currency: nw.profileCurrency, totalBase: nw.total },
+    });
+    return {
+      date: dateToISO(snap.snapshotDate),
+      currency: snap.currency,
+      total: this.dec(snap.totalBase).toString(),
+    };
+  }
+
+  /** Net-worth snapshots over the last `days` (owner-only), oldest first. */
+  async getNetWorthHistory(userId: string, days = 365): Promise<NetWorthHistoryDto> {
+    const profileCurrency = await this.getProfileCurrency(userId);
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - Math.max(1, days));
+    const rows = await this.prisma.netWorthSnapshot.findMany({
+      where: { userId, snapshotDate: { gte: toUtcDate(dateToISO(since)) } },
+      orderBy: { snapshotDate: 'asc' },
+    });
+    return {
+      profileCurrency,
+      points: rows.map((r) => ({
+        date: dateToISO(r.snapshotDate),
+        currency: r.currency,
+        total: this.dec(r.totalBase).toString(),
+      })),
+    };
+  }
+
+  // ── Saved filters (#8) ──────────────────────────────────────────────────────
+  private savedFilterToDto(r: {
+    id: string;
+    name: string;
+    filters: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+  }): SavedFilterDto {
+    return {
+      id: r.id,
+      name: r.name,
+      filters: (r.filters ?? {}) as PersonalTransactionFilter,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    };
+  }
+
+  async listSavedFilters(userId: string): Promise<SavedFilterDto[]> {
+    const rows = await this.prisma.savedFilter.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((r) => this.savedFilterToDto(r));
+  }
+
+  async createSavedFilter(userId: string, dto: CreateSavedFilterDto): Promise<SavedFilterDto> {
+    const row = await this.prisma.savedFilter.create({
+      data: {
+        userId,
+        name: dto.name,
+        filters: dto.filters as Prisma.InputJsonValue,
+      },
+    });
+    return this.savedFilterToDto(row);
+  }
+
+  async deleteSavedFilter(userId: string, id: string): Promise<void> {
+    const res = await this.prisma.savedFilter.deleteMany({ where: { id, userId } });
+    if (res.count === 0) {
+      throw new NotFoundException('Saved filter not found');
+    }
   }
 
   /** Bucket key for a date at the requested granularity. */

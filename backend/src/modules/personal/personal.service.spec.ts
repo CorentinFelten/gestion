@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
 import { PersonalService } from './personal.service';
 
@@ -13,7 +13,13 @@ import { PersonalService } from './personal.service';
 // ── In-memory Prisma fake ─────────────────────────────────────────────────────
 type Row = Record<string, any>;
 
-const toT = (v: any): number => (v instanceof Date ? v.getTime() : v);
+const toT = (v: any): number => {
+  if (v instanceof Date) return v.getTime();
+  // Numeric (decimal) strings compare numerically, matching Prisma's Decimal
+  // range filters (amount gte/lte). Non-numeric strings fall through unchanged.
+  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+  return v;
+};
 
 function matchValue(fieldVal: any, cond: any): boolean {
   if (cond === null) return fieldVal === null || fieldVal === undefined;
@@ -74,6 +80,8 @@ class FakePrisma {
   categories: Row[] = [];
   transactions: Row[] = [];
   settlements: Row[] = [];
+  netWorthSnapshots: Row[] = [];
+  savedFilters: Row[] = [];
   memberships = new Set<string>(); // `${householdId}:${userId}`
 
   account = {
@@ -86,6 +94,9 @@ class FakePrisma {
         archivedAt: null,
         sortOrder: 0,
         createdAt: new Date(),
+        interestRate: null,
+        creditLimit: null,
+        minPayment: null,
         ...data,
       };
       this.accounts.push(row);
@@ -185,6 +196,49 @@ class FakePrisma {
           matchWhere(s, { id: where.id }) &&
           matchHouseholdMembership(s, where, this.memberships),
       ) ?? null,
+  };
+
+  netWorthSnapshot = {
+    findMany: async ({ where, orderBy }: any) => {
+      let rows = this.netWorthSnapshots.filter((r) => matchWhere(r, where));
+      if (orderBy?.snapshotDate === 'asc') {
+        rows = [...rows].sort((a, b) => a.snapshotDate.getTime() - b.snapshotDate.getTime());
+      }
+      return rows;
+    },
+    upsert: async ({ where, create, update }: any) => {
+      const key = where.userId_snapshotDate;
+      const existing = this.netWorthSnapshots.find(
+        (r) => r.userId === key.userId && r.snapshotDate.getTime() === key.snapshotDate.getTime(),
+      );
+      if (existing) {
+        Object.assign(existing, update);
+        return existing;
+      }
+      const row = { id: nextId('nws'), createdAt: new Date(), ...create };
+      this.netWorthSnapshots.push(row);
+      return row;
+    },
+  };
+
+  savedFilter = {
+    findMany: async ({ where, orderBy }: any) => {
+      let rows = this.savedFilters.filter((r) => matchWhere(r, where));
+      if (orderBy?.createdAt === 'asc') {
+        rows = [...rows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      }
+      return rows;
+    },
+    create: async ({ data }: any) => {
+      const row = { id: nextId('sf'), createdAt: new Date(), updatedAt: new Date(), ...data };
+      this.savedFilters.push(row);
+      return row;
+    },
+    deleteMany: async ({ where }: any) => {
+      const before = this.savedFilters.length;
+      this.savedFilters = this.savedFilters.filter((r) => !matchWhere(r, where));
+      return { count: before - this.savedFilters.length };
+    },
   };
 }
 
@@ -748,5 +802,166 @@ describe('PersonalService, linked shared-ledger refs (SEC-12)', () => {
     await expect(
       service.updateTransaction(USER_A, txn.id, { linkedSettlementId: 'foreignStl' }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// ── #9 credit-card payoff projection ────────────────────────────────────────
+describe('PersonalService, payoff schedule', () => {
+  async function creditWithDebt(service: any, prisma: FakePrisma, opts: any) {
+    seedUser(prisma, USER_A);
+    const acc = await service.createAccount(USER_A, {
+      name: 'Visa', type: 'credit_card', currency: 'EUR', openingBalance: '0', ...opts,
+    });
+    // Spend on the card → negative balance (amount owed).
+    await service.createTransaction(USER_A, {
+      accountId: acc.id, type: 'expense', amount: '1000', txnDate: today,
+    });
+    return acc;
+  }
+
+  it('rejects payoff for a non-credit account', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    const acc = await service.createAccount(USER_A, {
+      name: 'Courant', type: 'checking', currency: 'EUR',
+    });
+    await expect(service.getPayoffSchedule(USER_A, acc.id, '100')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('clears a 0% debt in ceil(balance / payment) months with no interest', async () => {
+    const { service, prisma } = makeService();
+    const acc = await creditWithDebt(service, prisma, { interestRate: '0' });
+    const res = await service.getPayoffSchedule(USER_A, acc.id, '250');
+    expect(res.startingBalance).toBe('1000');
+    expect(res.neverPaysOff).toBe(false);
+    expect(res.months).toBe(4); // 1000 / 250
+    expect(res.totalInterest).toBe('0');
+    expect(res.totalPaid).toBe('1000');
+    expect(res.schedule[res.schedule.length - 1].balance).toBe('0');
+  });
+
+  it('accrues interest and still converges for a positive APR', async () => {
+    const { service, prisma } = makeService();
+    const acc = await creditWithDebt(service, prisma, { interestRate: '19.99' });
+    const res = await service.getPayoffSchedule(USER_A, acc.id, '100');
+    expect(res.neverPaysOff).toBe(false);
+    expect(res.months).toBeGreaterThan(10); // interest stretches it past 10 payments
+    expect(Number(res.totalInterest)).toBeGreaterThan(0);
+    expect(Number(res.totalPaid)).toBeCloseTo(1000 + Number(res.totalInterest), 2);
+    expect(res.schedule[res.schedule.length - 1].balance).toBe('0');
+  });
+
+  it('flags neverPaysOff when the payment is below the monthly interest', async () => {
+    const { service, prisma } = makeService();
+    const acc = await creditWithDebt(service, prisma, { interestRate: '24' });
+    // 24% APR on 1000 = 20/month interest; paying 15 never reduces principal.
+    const res = await service.getPayoffSchedule(USER_A, acc.id, '15');
+    expect(res.neverPaysOff).toBe(true);
+    expect(res.months).toBe(0);
+    expect(res.schedule).toHaveLength(0);
+  });
+
+  it('returns an empty schedule when nothing is owed', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    const acc = await service.createAccount(USER_A, {
+      name: 'Visa', type: 'credit_card', currency: 'EUR', openingBalance: '0', interestRate: '20',
+    });
+    const res = await service.getPayoffSchedule(USER_A, acc.id, '100');
+    expect(res.startingBalance).toBe('0');
+    expect(res.neverPaysOff).toBe(false);
+    expect(res.months).toBe(0);
+  });
+
+  it('persists and returns credit metadata on the account DTO', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    const acc = await service.createAccount(USER_A, {
+      name: 'Visa', type: 'credit_card', currency: 'EUR',
+      interestRate: '19.99', creditLimit: '5000', minPayment: '35',
+    });
+    expect(acc.interestRate).toBe('19.99');
+    expect(acc.creditLimit).toBe('5000');
+    expect(acc.minPayment).toBe('35');
+    const cleared = await service.updateAccount(USER_A, acc.id, { interestRate: null });
+    expect(cleared.interestRate).toBeNull();
+  });
+});
+
+// ── #3 net-worth snapshots ──────────────────────────────────────────────────
+describe('PersonalService, net-worth snapshots', () => {
+  it('captures an idempotent daily snapshot (upsert per day)', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A, 'EUR');
+    await service.createAccount(USER_A, {
+      name: 'Courant', type: 'checking', currency: 'EUR', openingBalance: '3100',
+    });
+
+    const first = await service.captureNetWorthSnapshot(USER_A);
+    expect(first.total).toBe('3100');
+    expect(first.currency).toBe('EUR');
+    await service.captureNetWorthSnapshot(USER_A); // same day again
+    expect(prisma.netWorthSnapshots).toHaveLength(1); // upserted, not duplicated
+  });
+
+  it('returns history oldest-first and scoped to the owner', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A, 'EUR');
+    seedUser(prisma, USER_B, 'EUR');
+    prisma.netWorthSnapshots.push(
+      { id: 's1', userId: USER_A, snapshotDate: new Date('2026-01-10'), currency: 'EUR', totalBase: '100' },
+      { id: 's2', userId: USER_A, snapshotDate: new Date('2026-02-10'), currency: 'EUR', totalBase: '250' },
+      { id: 's3', userId: USER_B, snapshotDate: new Date('2026-02-10'), currency: 'EUR', totalBase: '999' },
+    );
+    const hist = await service.getNetWorthHistory(USER_A, 100000);
+    expect(hist.points.map((p: any) => p.total)).toEqual(['100', '250']); // not B's 999
+    expect(hist.points[0].date).toBe('2026-01-10');
+  });
+});
+
+// ── #8 saved filters + amount range ─────────────────────────────────────────
+describe('PersonalService, saved filters', () => {
+  it('creates, lists (owner-only), and deletes saved filters', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    seedUser(prisma, USER_B);
+    const f = await service.createSavedFilter(USER_A, {
+      name: 'Restos > 20', filters: { search: 'resto', minAmount: '20' },
+    });
+    expect(f.filters.search).toBe('resto');
+    await service.createSavedFilter(USER_B, { name: 'B private', filters: { type: 'income' } });
+
+    const listA = await service.listSavedFilters(USER_A);
+    expect(listA).toHaveLength(1); // never sees B's
+    expect(listA[0].name).toBe('Restos > 20');
+
+    await service.deleteSavedFilter(USER_A, f.id);
+    expect(await service.listSavedFilters(USER_A)).toHaveLength(0);
+  });
+
+  it('refuses to delete another user\'s filter (404)', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    seedUser(prisma, USER_B);
+    const f = await service.createSavedFilter(USER_B, { name: 'B', filters: {} });
+    await expect(service.deleteSavedFilter(USER_A, f.id)).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.savedFilters).toHaveLength(1); // untouched
+  });
+
+  it('filters transactions by inclusive amount range', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A);
+    const acc = await service.createAccount(USER_A, {
+      name: 'A', type: 'checking', currency: 'EUR', openingBalance: '0',
+    });
+    for (const amount of ['5', '25', '100']) {
+      await service.createTransaction(USER_A, {
+        accountId: acc.id, type: 'expense', amount, txnDate: today,
+      });
+    }
+    const mid = await service.listTransactions(USER_A, { minAmount: '10', maxAmount: '50' });
+    expect(mid.map((t: any) => t.amount).sort()).toEqual(['25']);
   });
 });

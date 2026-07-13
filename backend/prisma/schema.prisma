@@ -86,6 +86,8 @@ model User {
   categories           Category[]
   accounts             Account[]
   personalTransactions PersonalTransaction[]
+  netWorthSnapshots    NetWorthSnapshot[]
+  savedFilters         SavedFilter[]
   paidTransactions     Transaction[]         @relation("TransactionPayer")
   createdTransactions  Transaction[]         @relation("TransactionCreatedBy")
   splits               TransactionSplit[]
@@ -380,6 +382,11 @@ model Account {
   // currency: FR → EUR, CA → CAD). App logic supports FR & CA today.
   country        String      @default("FR") @db.Char(2)
   openingBalance Decimal     @default(0) @map("opening_balance") @db.Decimal(20, 6)
+  // Credit-account payoff metadata (only meaningful for type = credit; null
+  // otherwise). interestRate is a nominal annual percentage rate, e.g. 19.99.
+  interestRate   Decimal?    @map("interest_rate") @db.Decimal(9, 6)
+  creditLimit    Decimal?    @map("credit_limit") @db.Decimal(20, 6)
+  minPayment     Decimal?    @map("min_payment") @db.Decimal(20, 6)
   isActive       Boolean     @default(true) @map("is_active")
   archivedAt     DateTime?   @map("archived_at")
   sortOrder      Int         @default(0) @map("sort_order")
@@ -391,6 +398,42 @@ model Account {
 
   @@index([userId])
   @@map("accounts")
+}
+
+// Daily snapshot of a user's net worth (total in their profile currency at the
+// latest rate). Captured nightly + on demand so the net-worth *trend* survives —
+// live net worth is computed fresh and would otherwise leave no history. One row
+// per user per calendar day (idempotent upsert).
+model NetWorthSnapshot {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  snapshotDate DateTime @map("snapshot_date") @db.Date
+  currency     String   @db.Char(3)
+  totalBase    Decimal  @map("total_base") @db.Decimal(20, 6)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, snapshotDate])
+  @@index([userId, snapshotDate])
+  @@map("net_worth_snapshots")
+}
+
+// A named, reusable personal-transaction filter preset, private to its owner.
+// `filters` holds the serialized PersonalTransactionFilter (type, account,
+// category, date range, amount range, free-text search).
+model SavedFilter {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  filters   Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_filters")
 }
 
 model PersonalTransaction {

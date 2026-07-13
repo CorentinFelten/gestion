@@ -18,6 +18,8 @@ import { PersonalService } from './personal.service';
 import {
   CreateAccountSchema,
   CreatePersonalTransactionSchema,
+  CreateSavedFilterSchema,
+  PayoffQuerySchema,
   PersonalTransactionFilterSchema,
   UpdateAccountSchema,
   UpdatePersonalTransactionSchema,
@@ -25,6 +27,7 @@ import {
 import type {
   CreateAccountDto,
   CreatePersonalTransactionDto,
+  CreateSavedFilterDto,
   PersonalTransactionFilter,
   StatsPeriod,
   StatsView,
@@ -72,6 +75,16 @@ export class PersonalController {
     return this.personal.getAccountBalance(userId, id);
   }
 
+  // Credit-account payoff projection (#9).
+  @Get('accounts/:id/payoff')
+  payoff(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Query(new ZodValidationPipe(PayoffQuerySchema)) query: { monthlyPayment: string },
+  ) {
+    return this.personal.getPayoffSchedule(userId, id, query.monthlyPayment);
+  }
+
   // ── Transactions ──────────────────────────────────────────────────────────
   @Get('transactions')
   listTransactions(
@@ -111,6 +124,45 @@ export class PersonalController {
   @Get('net-worth')
   netWorth(@CurrentUser('id') userId: string) {
     return this.personal.getNetWorth(userId);
+  }
+
+  // Net-worth trend history (#3).
+  @Get('net-worth/history')
+  netWorthHistory(
+    @CurrentUser('id') userId: string,
+    @Query('days') days?: string,
+  ) {
+    const parsed = Number(days);
+    const window = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 3650) : 365;
+    return this.personal.getNetWorthHistory(userId, window);
+  }
+
+  @Post('net-worth/snapshot')
+  @UseGuards(CsrfGuard)
+  captureSnapshot(@CurrentUser('id') userId: string) {
+    return this.personal.captureNetWorthSnapshot(userId);
+  }
+
+  // ── Saved transaction filters (#8) ──────────────────────────────────────────
+  @Get('saved-filters')
+  listSavedFilters(@CurrentUser('id') userId: string) {
+    return this.personal.listSavedFilters(userId);
+  }
+
+  @Post('saved-filters')
+  @UseGuards(CsrfGuard)
+  createSavedFilter(
+    @CurrentUser('id') userId: string,
+    @Body(new ZodValidationPipe(CreateSavedFilterSchema)) body: CreateSavedFilterDto,
+  ) {
+    return this.personal.createSavedFilter(userId, body);
+  }
+
+  @Delete('saved-filters/:id')
+  @HttpCode(204)
+  @UseGuards(CsrfGuard)
+  async removeSavedFilter(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    await this.personal.deleteSavedFilter(userId, id);
   }
 
   @Get('stats')

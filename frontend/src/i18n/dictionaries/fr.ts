@@ -453,6 +453,16 @@ export const fr = {
     monthTxEmptyMessage: 'Vos revenus, dépenses et virements du mois apparaîtront ici.',
     monthTxCountOne: '{{count}} transaction',
     monthTxCountOther: '{{count}} transactions',
+    // Transaction filter bar (search + amount range + saved filters)
+    filterSearchPlaceholder: 'Bénéficiaire ou note…',
+    filterMinAmount: 'Montant min',
+    filterMaxAmount: 'Montant max',
+    filterSave: 'Enregistrer le filtre',
+    filterSavePrompt: 'Nom du filtre enregistré :',
+    filterDelete: 'Supprimer le filtre {{name}}',
+    filterDeleteConfirm: 'Supprimer le filtre « {{name}} » ?',
+    filterNoMatchesTitle: 'Aucun résultat',
+    filterNoMatchesMessage: 'Aucune transaction ne correspond à ces filtres. Essayez de les assouplir.',
     figuresNote:
       'Montants affichés en {{currency}}. Taux d’épargne = (revenus − dépenses) ÷ revenus.',
     // Net-worth statement
@@ -555,6 +565,28 @@ export const fr = {
     openingBalanceHint:
       'Solde que le compte détient déjà aujourd’hui, dans sa propre devise.',
     creating: 'Création…',
+    editAccount: 'Modifier le compte',
+    // Credit-card details
+    creditCardDetails: 'Détails de la carte de crédit',
+    interestRate: 'Taux d’intérêt annuel (%)',
+    interestRateHint: 'Taux annuel en pourcentage, ex. 19,99.',
+    creditLimit: 'Limite de crédit',
+    minPayment: 'Paiement minimum',
+    // Payoff calculator
+    payoffTitle: 'Calculateur de remboursement',
+    monthlyPayment: 'Paiement mensuel',
+    payoffMinHint: 'Pré-rempli avec votre paiement minimum.',
+    payoffEnterPayment: 'Saisissez un paiement mensuel pour estimer le remboursement.',
+    payoffCalculating: 'Calcul du remboursement…',
+    payoffNothingOwed: 'Rien à rembourser : le solde de cette carte est à zéro.',
+    payoffNeverClears:
+      'Ce paiement ne couvre pas les intérêts, le solde ne sera jamais remboursé. Augmentez le paiement mensuel.',
+    payoffMonths: 'Durée',
+    payoffMonthsCountOne: '{{count}} mois',
+    payoffMonthsCountOther: '{{count}} mois',
+    payoffTotalInterest: 'Intérêts totaux',
+    payoffTotalPaid: 'Total remboursé',
+    payoffMonthLabel: 'Mois {{n}}',
   },
 
   // ── stats: personal statistics ─────────────────────────────────────────────
@@ -581,6 +613,12 @@ export const fr = {
     loading: 'Calcul en cours…',
     emptyTitle: 'Rien à représenter pour l’instant',
     emptyMessage: 'Enregistrez quelques transactions et le graphique se remplira.',
+    // Net-worth trend from real captured snapshots
+    netWorthHistoryNote:
+      'Instantanés de votre patrimoine net, un par jour, évalués au dernier taux de change.',
+    netWorthHistoryEmptyTitle: 'L’historique se construit jour après jour',
+    netWorthHistoryEmptyMessage:
+      'Votre patrimoine net est capturé chaque jour où vous consultez cette page. Revenez régulièrement pour voir la courbe se dessiner.',
   },
 
   // ── validation: form error messages (support {{param}}) ────────────────────

@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { StatsPoint } from '@/types';
+import type { NetWorthPoint, PayoffMonth, StatsPoint } from '@/types';
 import { personalTxTypeLabel, useFormat, useT } from '@/i18n';
 import { toNumber } from './format';
 import { useIsDark } from './useIsDark';
@@ -370,6 +370,151 @@ export function CategoryPieChart({
           )}
         />
       </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ── Net-worth history (real captured snapshots, oldest-first) ────────────────
+export function NetWorthHistoryChart({
+  points,
+  currency,
+}: {
+  points: NetWorthPoint[];
+  currency: string;
+}) {
+  const theme = useChartTheme();
+  const { t } = useT();
+  const f = useFormat();
+  const axisFmt = useMoneyAxisFormatter();
+  // Locale-aware compact axis date (day + short month), full date in the tooltip.
+  const shortDate = new Intl.DateTimeFormat(f.locale, { day: '2-digit', month: 'short' });
+  const data = points.map((p) => {
+    const d = new Date(`${p.date}T00:00:00`);
+    return {
+      label: Number.isNaN(d.getTime()) ? p.date : shortDate.format(d),
+      fullLabel: f.date(p.date),
+      worth: toNumber(p.total),
+    };
+  });
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+        <defs>
+          <linearGradient id="nw-history-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={theme.accent} stopOpacity={0.28} />
+            <stop offset="100%" stopColor={theme.accent} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} stroke={theme.grid} />
+        <XAxis
+          dataKey="label"
+          tick={AXIS_TICK}
+          stroke={theme.axis}
+          tickLine={false}
+          minTickGap={24}
+        />
+        <YAxis
+          tick={AXIS_TICK}
+          stroke={theme.axis}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          tickFormatter={axisFmt}
+        />
+        <Tooltip
+          cursor={{ stroke: theme.grid }}
+          content={(p) => (
+            <MoneyTooltip
+              active={p.active}
+              payload={p.payload as unknown as TooltipEntry[]}
+              label={p.label as string | undefined}
+              currency={currency}
+              theme={theme}
+            />
+          )}
+        />
+        <Legend {...currencyLegendProps(theme, currency)} />
+        <Area
+          type="monotone"
+          dataKey="worth"
+          name={t('money.netWorth')}
+          stroke={theme.accent}
+          strokeWidth={2}
+          fill="url(#nw-history-fill)"
+          dot={data.length <= 12}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ── Credit-card payoff: outstanding balance over the amortization schedule ────
+export function PayoffBalanceChart({
+  schedule,
+  currency,
+  monthLabel,
+}: {
+  schedule: PayoffMonth[];
+  currency: string;
+  /** Localized label for a month index, e.g. `Mois 3`. */
+  monthLabel: (n: number) => string;
+}) {
+  const theme = useChartTheme();
+  const { t } = useT();
+  const axisFmt = useMoneyAxisFormatter();
+  const data = schedule.map((m) => ({
+    label: String(m.month),
+    fullLabel: monthLabel(m.month),
+    balance: toNumber(m.balance),
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+        <defs>
+          <linearGradient id="payoff-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={theme.expense} stopOpacity={0.24} />
+            <stop offset="100%" stopColor={theme.expense} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} stroke={theme.grid} />
+        <XAxis
+          dataKey="label"
+          tick={AXIS_TICK}
+          stroke={theme.axis}
+          tickLine={false}
+          minTickGap={20}
+        />
+        <YAxis
+          tick={AXIS_TICK}
+          stroke={theme.axis}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          tickFormatter={axisFmt}
+        />
+        <Tooltip
+          cursor={{ stroke: theme.grid }}
+          content={(p) => (
+            <MoneyTooltip
+              active={p.active}
+              payload={p.payload as unknown as TooltipEntry[]}
+              label={p.label as string | undefined}
+              currency={currency}
+              theme={theme}
+            />
+          )}
+        />
+        <Area
+          type="monotone"
+          dataKey="balance"
+          name={t('money.balance')}
+          stroke={theme.expense}
+          strokeWidth={2}
+          fill="url(#payoff-fill)"
+        />
+      </AreaChart>
     </ResponsiveContainer>
   );
 }

@@ -253,6 +253,12 @@ export interface Account {
   archivedAt: string | null;
   sortOrder: number;
   createdAt: string;
+  /** Annual interest rate (APR, percent as a decimal string). Credit cards only. */
+  interestRate: string | null;
+  /** Credit limit in the account's native currency. Credit cards only. */
+  creditLimit: string | null;
+  /** Minimum monthly payment in the account's native currency. Credit cards only. */
+  minPayment: string | null;
 }
 
 export interface AccountBalance {
@@ -313,6 +319,68 @@ export interface NetWorth {
   total: string;
   asOf: string;
   accounts: NetWorthAccount[];
+}
+
+// ── Net-worth history & snapshots ─────────────────────────────────────────────
+export interface NetWorthPoint {
+  /** ISO date `YYYY-MM-DD`. */
+  date: string;
+  currency: string;
+  total: string;
+}
+
+export interface NetWorthHistory {
+  profileCurrency: string;
+  /** Oldest-first series of captured net-worth snapshots. */
+  points: NetWorthPoint[];
+}
+
+// ── Credit-card payoff projection ─────────────────────────────────────────────
+export interface PayoffMonth {
+  month: number;
+  interest: string;
+  principal: string;
+  balance: string;
+}
+
+export interface PayoffSchedule {
+  accountId: string;
+  currency: string;
+  startingBalance: string;
+  monthlyPayment: string;
+  interestRate: string;
+  months: number;
+  totalInterest: string;
+  totalPaid: string;
+  /** True when the monthly payment doesn't cover interest (debt never clears). */
+  neverPaysOff: boolean;
+  schedule: PayoffMonth[];
+}
+
+// ── Saved personal-transaction filters ────────────────────────────────────────
+/** A persisted personal-transaction filter set (search + amount range + facets). */
+export interface SavedFilterValue {
+  accountId?: string;
+  type?: PersonalTxnType;
+  categoryId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  minAmount?: string;
+  maxAmount?: string;
+}
+
+export interface SavedFilter {
+  id: string;
+  name: string;
+  filters: SavedFilterValue;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedFilterInput {
+  name: string;
+  filters: SavedFilterValue;
 }
 
 export type StatsView = 'cashflow' | 'by-category' | 'by-account' | 'income-timeline';

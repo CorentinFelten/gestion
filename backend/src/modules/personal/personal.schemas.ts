@@ -39,6 +39,10 @@ export const CreateAccountSchema = z.object({
   country: countryCode.default('FR'),
   openingBalance: signedDecimalString.optional(),
   sortOrder: z.number().int().optional(),
+  // Credit-account payoff metadata (only meaningful for type = credit).
+  interestRate: positiveDecimalString.nullish(),
+  creditLimit: positiveDecimalString.nullish(),
+  minPayment: positiveDecimalString.nullish(),
 });
 
 export const UpdateAccountSchema = z
@@ -47,6 +51,9 @@ export const UpdateAccountSchema = z
     country: countryCode.optional(),
     sortOrder: z.number().int().optional(),
     isActive: z.boolean().optional(), // false => archive
+    interestRate: positiveDecimalString.nullish(),
+    creditLimit: positiveDecimalString.nullish(),
+    minPayment: positiveDecimalString.nullish(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: 'empty update' });
 
@@ -98,4 +105,17 @@ export const PersonalTransactionFilterSchema = z.object({
   to: isoDate.optional(),
   payee: z.string().optional(),
   search: z.string().optional(),
+  minAmount: positiveDecimalString.optional(),
+  maxAmount: positiveDecimalString.optional(),
+});
+
+// ── Saved filters (#8) ──────────────────────────────────────────────────────
+export const CreateSavedFilterSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  filters: PersonalTransactionFilterSchema,
+});
+
+// ── Credit-account payoff (#9) ──────────────────────────────────────────────
+export const PayoffQuerySchema = z.object({
+  monthlyPayment: positiveDecimalString,
 });
