@@ -21,23 +21,41 @@ function contextFor(request: any): ExecutionContext {
 describe('AuthGuard', () => {
   const future = new Date(Date.now() + 60_000);
   const past = new Date(Date.now() - 60_000);
+  const recent = new Date(Date.now() - 5_000); // active 5s ago (within idle window)
+  const longIdle = new Date(Date.now() - 31 * 60 * 1000); // idle 31 min (past the 30-min window)
 
-  const buildGuard = (session: any) =>
-    new AuthGuard({
-      session: { findUnique: async () => session },
+  const buildGuard = (session: any) => {
+    const update = jest.fn().mockResolvedValue(session);
+    const guard = new AuthGuard({
+      session: { findUnique: async () => session, update },
     } as unknown as PrismaService);
+    return { guard, update };
+  };
 
   it('rejects when no session cookie is present', async () => {
-    const guard = buildGuard(null);
+    const { guard } = buildGuard(null);
     await expect(guard.canActivate(contextFor({ cookies: {} }))).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });
 
   it('rejects an expired session', async () => {
-    const guard = buildGuard({
+    const { guard } = buildGuard({
       id: 's1',
       expiresAt: past,
+      lastActivityAt: recent,
+      user: { id: 'u1', isActive: true, email: 'a@b.c', displayName: 'A', preferredCurrency: 'EUR', locale: 'en-US' },
+    });
+    await expect(
+      guard.canActivate(contextFor({ cookies: { gestion_session: 's1' } })),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects a session idle beyond the timeout window', async () => {
+    const { guard } = buildGuard({
+      id: 's1',
+      expiresAt: future, // absolute cap fine…
+      lastActivityAt: longIdle, // …but idle > 30 min
       user: { id: 'u1', isActive: true, email: 'a@b.c', displayName: 'A', preferredCurrency: 'EUR', locale: 'en-US' },
     });
     await expect(
@@ -46,9 +64,10 @@ describe('AuthGuard', () => {
   });
 
   it('rejects an inactive user', async () => {
-    const guard = buildGuard({
+    const { guard } = buildGuard({
       id: 's1',
       expiresAt: future,
+      lastActivityAt: recent,
       user: { id: 'u1', isActive: false, email: 'a@b.c', displayName: 'A', preferredCurrency: 'EUR', locale: 'en-US' },
     });
     await expect(
@@ -57,9 +76,10 @@ describe('AuthGuard', () => {
   });
 
   it('accepts a valid session and attaches req.user + req.sessionId', async () => {
-    const guard = buildGuard({
+    const { guard } = buildGuard({
       id: 's1',
       expiresAt: future,
+      lastActivityAt: recent,
       user: { id: 'u1', isActive: true, email: 'a@b.c', displayName: 'Alice', preferredCurrency: 'EUR', locale: 'en-US' },
     });
     const req: any = { cookies: { gestion_session: 's1' } };
@@ -72,6 +92,32 @@ describe('AuthGuard', () => {
       locale: 'en-US',
     });
     expect(req.sessionId).toBe('s1');
+  });
+
+  it('registers activity (slides lastActivityAt) once past the throttle', async () => {
+    const staleButValid = new Date(Date.now() - 5 * 60 * 1000); // 5 min ago: valid, past throttle
+    const { guard, update } = buildGuard({
+      id: 's1',
+      expiresAt: future,
+      lastActivityAt: staleButValid,
+      user: { id: 'u1', isActive: true, email: 'a@b.c', displayName: 'A', preferredCurrency: 'EUR', locale: 'en-US' },
+    });
+    await expect(
+      guard.canActivate(contextFor({ cookies: { gestion_session: 's1' } })),
+    ).resolves.toBe(true);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0].where).toEqual({ id: 's1' });
+  });
+
+  it('does not write on a very recent request (throttled)', async () => {
+    const { guard, update } = buildGuard({
+      id: 's1',
+      expiresAt: future,
+      lastActivityAt: recent, // 5s ago, under the 60s throttle
+      user: { id: 'u1', isActive: true, email: 'a@b.c', displayName: 'A', preferredCurrency: 'EUR', locale: 'en-US' },
+    });
+    await guard.canActivate(contextFor({ cookies: { gestion_session: 's1' } }));
+    expect(update).not.toHaveBeenCalled();
   });
 });
 

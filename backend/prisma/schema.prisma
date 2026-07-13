@@ -101,17 +101,21 @@ model User {
 
 // Server-side sessions (cookie-based auth; httpOnly cookie stores the session id).
 model Session {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  expiresAt DateTime @map("expires_at")
-  userAgent String?  @map("user_agent")
-  ip        String?
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  expiresAt      DateTime @map("expires_at")
+  // Sliding idle timeout: advanced on each authenticated request; the session is
+  // revoked once now - lastActivityAt exceeds the idle window (SESSION_IDLE_MINUTES).
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  userAgent      String?  @map("user_agent")
+  ip             String?
+  createdAt      DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([lastActivityAt])
   @@map("sessions")
 }
 

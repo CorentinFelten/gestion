@@ -16,14 +16,18 @@ describe('SessionService', () => {
     return { service: new SessionService(prisma), deleteMany };
   }
 
-  it('purgeExpired deletes only rows whose expiresAt is in the past', async () => {
+  it('purgeExpired deletes rows past their absolute expiry OR idle beyond the window', async () => {
     const { service, deleteMany } = build({ count: 3 });
     const now = new Date('2026-07-11T00:00:00.000Z');
 
     const purged = await service.purgeExpired(now);
 
     expect(purged).toBe(3);
-    expect(deleteMany).toHaveBeenCalledWith({ where: { expiresAt: { lt: now } } });
+    // 30-minute idle window before `now`.
+    const idleCutoff = new Date(now.getTime() - 30 * 60 * 1000);
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { OR: [{ expiresAt: { lt: now } }, { lastActivityAt: { lt: idleCutoff } }] },
+    });
   });
 
   it('scheduled purge swallows errors (never crashes the cron)', async () => {

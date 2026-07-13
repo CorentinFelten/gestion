@@ -115,7 +115,7 @@ cd frontend && npm install && npm run build     # dev: npm run dev
 ### Data, images & migrations
 - **All persistent state is bind-mounted to `./data/`** (not Docker named volumes): `./data/postgres` (DB cluster), `./data/uploads` (receipts), `./data/backups` (nightly pg_dump), `./data/caddy/{data,config}`. To back up or migrate: `docker compose down`, copy `./data` to the new host, `docker compose up -d`. `./data/` is gitignored; `./data/postgres` is owned by uid 999 / mode 0700 (use `sudo` or a throwaway container to read it).
 - **Image tags are pinned** to exact versions (no floating tags): `postgres:16.14`, `caddy:2.11.4`, `node:24.18.0-slim` (backend + frontend build), `nginx:1.27.5-alpine` (frontend runtime).
-- **Migrations** (append-only, applied by the backend entrypoint on boot): `0000_init`, `0001_account_country`, `0002_user_pinned_currencies`, `0003_inapp_invites`, `0004_personal_transfer_index`.
+- **Migrations** (append-only, applied by the backend entrypoint on boot): `0000_init`, `0001_account_country`, `0002_user_pinned_currencies`, `0003_inapp_invites`, `0004_personal_transfer_index`, `0005_household_member_unique_user`, `0006_session_last_activity`.
 - **Prisma 7 is engine-free.** The runtime client connects through the **`pg` driver adapter** (`backend/src/prisma/prisma.service.ts`), not a bundled Rust engine. The datasource `url` lives in **`backend/prisma.config.ts`** (read from `process.env.DATABASE_URL`), not in `schema.prisma`. Pool size = `DB_POOL_MAX` (default 10) passed to the adapter as `pg`'s `max` — the old `connection_limit` URL param is **not** honored by the adapter. `prisma.config.ts` is excluded from `tsconfig.build.json` so `dist/` keeps its `dist/main.js` entrypoint.
 
 ### Handy commands

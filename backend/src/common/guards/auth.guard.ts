@@ -1,17 +1,20 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { RequestWithUser } from '../types/authenticated-user';
+import { SESSION_ACTIVITY_THROTTLE_MS, sessionIdleMs } from '../session-timeouts';
 
 export const SESSION_COOKIE = 'gestion_session';
 
 /**
  * Session-cookie auth guard.
  *
- * Reads the httpOnly session cookie, resolves it to an active, unexpired session
- * whose user is still active, and attaches `req.user` / `req.sessionId` so
- * `@CurrentUser()` works everywhere. Sessions are minted fresh (rotated) on
- * login by `SessionService`; expiry is fixed at creation — there is no sliding
- * renewal on use.
+ * Reads the httpOnly session cookie, resolves it to an active session whose user
+ * is still active, and attaches `req.user` / `req.sessionId` so `@CurrentUser()`
+ * works everywhere. Sessions enforce a SLIDING idle timeout: a session is
+ * rejected once it has been idle longer than the window (SESSION_IDLE_MINUTES),
+ * and every authenticated request registers activity by advancing
+ * `lastActivityAt` (throttled). Multiple concurrent sessions are independent —
+ * each ages by its own last activity. `expiresAt` remains an absolute cap.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -30,8 +33,23 @@ export class AuthGuard implements CanActivate {
       include: { user: true },
     });
 
-    if (!session || session.expiresAt < new Date() || !session.user.isActive) {
+    const now = new Date();
+    if (!session || session.expiresAt < now || !session.user.isActive) {
       throw new UnauthorizedException('Invalid or expired session');
+    }
+
+    // Sliding idle timeout: revoke once idle beyond the window.
+    const idleForMs = now.getTime() - session.lastActivityAt.getTime();
+    if (idleForMs > sessionIdleMs()) {
+      throw new UnauthorizedException('Invalid or expired session');
+    }
+
+    // Register activity, throttled so a burst doesn't write on every request.
+    if (idleForMs > SESSION_ACTIVITY_THROTTLE_MS) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { lastActivityAt: now },
+      });
     }
 
     request.sessionId = session.id;

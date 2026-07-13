@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { sessionIdleMs } from '../../common/session-timeouts';
 
 export interface CreatedSession {
   id: string;
@@ -30,7 +31,8 @@ export class SessionService {
 
   /** Create a fresh session for a user (rotation happens by always creating anew). */
   async create(userId: string, meta?: { userAgent?: string; ip?: string }): Promise<CreatedSession> {
-    const expiresAt = new Date(Date.now() + this.ttlMs);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + this.ttlMs);
     // Session id = 256 bits of CSPRNG entropy (base64url), not Prisma's cuid()
     // default. cuid embeds a timestamp/counter/host fingerprint and is not
     // unpredictable enough for a bearer session token.
@@ -40,6 +42,7 @@ export class SessionService {
         id,
         userId,
         expiresAt,
+        lastActivityAt: now,
         userAgent: meta?.userAgent?.slice(0, 512),
         ip: meta?.ip,
       },
@@ -58,14 +61,17 @@ export class SessionService {
   }
 
   /**
-   * Sweep expired session rows. Sessions are otherwise only removed on
-   * logout/password-change, so an abandoned session lingers until its TTL and
-   * then forever, growing the table unbounded. AuthGuard already rejects an
-   * expired row, so this is pure hygiene (returns the number purged for logs).
+   * Sweep dead session rows: past their absolute expiry OR idle beyond the
+   * sliding window. Sessions are otherwise only removed on logout/password-
+   * change, so an abandoned session would linger; AuthGuard already rejects both
+   * cases, so this is pure hygiene (returns the number purged for logs).
    */
   async purgeExpired(now: Date = new Date()): Promise<number> {
+    const idleCutoff = new Date(now.getTime() - sessionIdleMs());
     const res = await this.prisma.session.deleteMany({
-      where: { expiresAt: { lt: now } },
+      where: {
+        OR: [{ expiresAt: { lt: now } }, { lastActivityAt: { lt: idleCutoff } }],
+      },
     });
     return res.count;
   }
