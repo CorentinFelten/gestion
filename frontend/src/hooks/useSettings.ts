@@ -17,13 +17,19 @@ export interface ProfileUpdate {
 
 export function useUpdateProfile() {
   const { refresh } = useAuth();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: ProfileUpdate) => {
       const headers = await csrfHeaders();
       const { data } = await api.patch<User>('/users/me', input, { headers });
       return data;
     },
-    onSuccess: () => refresh(),
+    onSuccess: () => {
+      // Net worth and stats are computed server-side from preferredCurrency, so a
+      // currency/locale change must refetch the personal ledger, not just auth.
+      void qc.invalidateQueries({ queryKey: ['me'] });
+      return refresh();
+    },
   });
 }
 
