@@ -279,7 +279,7 @@ export function BreakdownChart({
           stroke={theme.axis}
           tickLine={false}
           axisLine={false}
-          width={110}
+          width={150}
         />
         <Tooltip
           cursor={{ fill: theme.grid, opacity: 0.4 }}

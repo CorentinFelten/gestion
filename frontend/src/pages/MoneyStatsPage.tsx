@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
-import { useT } from '@/i18n';
+import { accountTypeLabel, useT } from '@/i18n';
 import { useStats } from '@/hooks/usePersonalStats';
+import { useAccounts } from '@/hooks/useAccounts';
 import { useNetWorth } from '@/hooks/useNetWorth';
 import {
   BreakdownChart,
@@ -35,8 +36,24 @@ export default function MoneyStatsPage() {
   const byAccount = useStats('by-account', period);
   const incomeTimeline = useStats('income-timeline', period);
   const netWorth = useNetWorth();
+  const accounts = useAccounts();
 
   const currency = netWorth.data?.profileCurrency ?? profileCurrency;
+
+  // The by-account view keys each point by accountId; enrich its label with the
+  // account type (e.g. «Compte courant») so two accounts sharing a name stay
+  // distinguishable in the chart.
+  const accountTypeById = useMemo(() => {
+    const m = new Map<string, string>();
+    accounts.data?.forEach((a) => m.set(a.id, accountTypeLabel(a.type)));
+    return m;
+  }, [accounts.data]);
+
+  const withAccountType = (points: StatsResponse['points']) =>
+    points.map((p) => {
+      const type = accountTypeById.get(p.key);
+      return type ? { ...p, label: `${p.label} · ${type}` } : p;
+    });
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -104,7 +121,7 @@ export default function MoneyStatsPage() {
           query={byAccount}
           isEmpty={(d) => d.points.length === 0}
         >
-          {(d) => <BreakdownChart points={d.points} currency={currency} />}
+          {(d) => <BreakdownChart points={withAccountType(d.points)} currency={currency} />}
         </ChartSection>
 
         <ChartSection
