@@ -109,6 +109,19 @@ function useMoneyAxisFormatter() {
   return (v: number) => f.number(v, { notation: 'compact', maximumFractionDigits: 1 });
 }
 
+/**
+ * Shared `<Legend>` props that tag every entry with the chart's currency, so the
+ * money unit is explicit on the chart itself (not only in the hover tooltip).
+ */
+function currencyLegendProps(theme: ReturnType<typeof useChartTheme>, currency: string) {
+  return {
+    iconType: 'circle' as const,
+    iconSize: 8,
+    wrapperStyle: { fontSize: 12, color: theme.axis },
+    formatter: (value: unknown) => `${String(value)} (${currency})`,
+  };
+}
+
 // ── Cashflow: income vs expense per period ───────────────────────────────────
 export function CashflowChart({
   points,
@@ -151,6 +164,7 @@ export function CashflowChart({
             />
           )}
         />
+        <Legend {...currencyLegendProps(theme, currency)} />
         <Bar
           dataKey="income"
           name={personalTxTypeLabel('income')}
@@ -209,6 +223,7 @@ export function IncomeTimelineChart({
             />
           )}
         />
+        <Legend {...currencyLegendProps(theme, currency)} />
         <Bar
           dataKey="income"
           name={personalTxTypeLabel('income')}
@@ -278,6 +293,7 @@ export function BreakdownChart({
             />
           )}
         />
+        <Legend {...currencyLegendProps(theme, currency)} />
         <Bar dataKey="total" name={t('stats.spending')} radius={[0, 4, 4, 0]}>
           {data.map((_, i) => (
             <Cell key={i} fill={QUALITATIVE[i % QUALITATIVE.length]} />
@@ -331,11 +347,7 @@ export function CategoryPieChart({
             <Cell key={i} fill={QUALITATIVE[i % QUALITATIVE.length]} />
           ))}
         </Pie>
-        <Legend
-          iconType="circle"
-          iconSize={8}
-          wrapperStyle={{ fontSize: 12, color: theme.axis }}
-        />
+        <Legend {...currencyLegendProps(theme, currency)} />
         <Tooltip
           content={(p) => (
             <MoneyTooltip
@@ -413,6 +425,7 @@ export function NetWorthTrendChart({
             />
           )}
         />
+        <Legend {...currencyLegendProps(theme, currency)} />
         <Area
           type="monotone"
           dataKey="worth"
