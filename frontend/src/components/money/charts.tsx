@@ -101,6 +101,23 @@ function MoneyTooltip({
   );
 }
 
+/**
+ * Shared `<Tooltip content>` renderer, every money chart uses the same hover card.
+ * Kept as a prop factory (not a wrapper component) so `<Tooltip>` stays a direct
+ * child of the chart, which recharts requires to discover it.
+ */
+function moneyTooltipContent(currency: string, theme: ReturnType<typeof useChartTheme>) {
+  return ({ active, payload, label }: { active?: boolean; payload?: unknown; label?: unknown }) => (
+    <MoneyTooltip
+      active={active}
+      payload={payload as unknown as TooltipEntry[]}
+      label={label as string | undefined}
+      currency={currency}
+      theme={theme}
+    />
+  );
+}
+
 const AXIS_TICK = { fontSize: 11 };
 
 /** Compact numeric axis ticks in the active locale (currency shown in tooltip). */
@@ -165,15 +182,7 @@ export function CashflowChart({
         />
         <Tooltip
           cursor={{ fill: theme.grid, opacity: 0.4 }}
-          content={(p) => (
-            <MoneyTooltip
-              active={p.active}
-              payload={p.payload as unknown as TooltipEntry[]}
-              label={p.label as string | undefined}
-              currency={currency}
-              theme={theme}
-            />
-          )}
+          content={moneyTooltipContent(currency, theme)}
         />
         <Legend {...currencyLegendProps(theme, currency)} />
         <Bar
@@ -224,15 +233,7 @@ export function IncomeTimelineChart({
         />
         <Tooltip
           cursor={{ fill: theme.grid, opacity: 0.4 }}
-          content={(p) => (
-            <MoneyTooltip
-              active={p.active}
-              payload={p.payload as unknown as TooltipEntry[]}
-              label={p.label as string | undefined}
-              currency={currency}
-              theme={theme}
-            />
-          )}
+          content={moneyTooltipContent(currency, theme)}
         />
         <Legend {...currencyLegendProps(theme, currency)} />
         <Bar
@@ -294,15 +295,7 @@ export function BreakdownChart({
         />
         <Tooltip
           cursor={{ fill: theme.grid, opacity: 0.4 }}
-          content={(p) => (
-            <MoneyTooltip
-              active={p.active}
-              payload={p.payload as unknown as TooltipEntry[]}
-              label={p.label as string | undefined}
-              currency={currency}
-              theme={theme}
-            />
-          )}
+          content={moneyTooltipContent(currency, theme)}
         />
         <Legend {...currencyLegendProps(theme, currency)} />
         <Bar dataKey="total" name={t('stats.spending')} radius={[0, 4, 4, 0]}>
@@ -360,14 +353,7 @@ export function CategoryPieChart({
         </Pie>
         <Legend {...currencyLegendProps(theme, currency)} />
         <Tooltip
-          content={(p) => (
-            <MoneyTooltip
-              active={p.active}
-              payload={p.payload as unknown as TooltipEntry[]}
-              currency={currency}
-              theme={theme}
-            />
-          )}
+          content={moneyTooltipContent(currency, theme)}
         />
       </PieChart>
     </ResponsiveContainer>
@@ -424,15 +410,7 @@ export function NetWorthHistoryChart({
         />
         <Tooltip
           cursor={{ stroke: theme.grid }}
-          content={(p) => (
-            <MoneyTooltip
-              active={p.active}
-              payload={p.payload as unknown as TooltipEntry[]}
-              label={p.label as string | undefined}
-              currency={currency}
-              theme={theme}
-            />
-          )}
+          content={moneyTooltipContent(currency, theme)}
         />
         <Legend {...currencyLegendProps(theme, currency)} />
         <Area
@@ -496,15 +474,7 @@ export function PayoffBalanceChart({
         />
         <Tooltip
           cursor={{ stroke: theme.grid }}
-          content={(p) => (
-            <MoneyTooltip
-              active={p.active}
-              payload={p.payload as unknown as TooltipEntry[]}
-              label={p.label as string | undefined}
-              currency={currency}
-              theme={theme}
-            />
-          )}
+          content={moneyTooltipContent(currency, theme)}
         />
         <Area
           type="monotone"
@@ -571,15 +541,7 @@ export function NetWorthTrendChart({
         />
         <Tooltip
           cursor={{ stroke: theme.grid }}
-          content={(p) => (
-            <MoneyTooltip
-              active={p.active}
-              payload={p.payload as unknown as TooltipEntry[]}
-              label={p.label as string | undefined}
-              currency={currency}
-              theme={theme}
-            />
-          )}
+          content={moneyTooltipContent(currency, theme)}
         />
         <Legend {...currencyLegendProps(theme, currency)} />
         <Area

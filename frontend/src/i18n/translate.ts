@@ -61,7 +61,6 @@ export function translate(dict: Dictionary, key: string, params?: TParams): stri
   const raw = resolve(dict, key);
   if (raw === undefined) {
     if (isDev()) {
-      // eslint-disable-next-line no-console
       console.warn(`[i18n] Missing translation key: "${key}"`);
     }
     return key;
