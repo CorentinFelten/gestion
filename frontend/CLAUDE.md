@@ -3,7 +3,7 @@
 Scoped guidance for `/frontend`. Read the **root `CLAUDE.md`** first for domain concepts and the QA process. This file is the tactical guide for the UI.
 
 ## Stack
-**Vite 8** (Rolldown bundler) · **React 18.3** · TypeScript · **Tailwind 3.4** · **TanStack Query** · **React Router 7** · **Recharts** · decimal.js · date-fns · zod. Single-origin; talks to `/api/v1` via `src/lib/api.ts` (axios, `withCredentials`).
+**Vite 8** (Rolldown bundler) · **React 18.3** · TypeScript · **Tailwind 4** (CSS-first config in `src/index.css` via `@theme`/`@custom-variant`; no `tailwind.config.js`) · **TanStack Query** · **React Router 7** · **Recharts** · decimal.js · date-fns · zod. Single-origin; talks to `/api/v1` via `src/lib/api.ts` (axios, `withCredentials`).
 
 ## Directory map (`src/`)
 | Path | What |

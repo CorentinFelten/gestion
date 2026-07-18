@@ -28,7 +28,7 @@ Browser ──► Caddy (reverse proxy, TLS) ──► /api/*  → Backend (Nest
 | Backend | Node 24 · **NestJS 11** · TypeScript · **Prisma 7** (engine-free; `pg` driver adapter) · PostgreSQL 16 |
 | Money math | **decimal.js** + Prisma `Decimal` (`NUMERIC(20,6)`; rates `NUMERIC(20,10)`), **never floats** |
 | Auth | Cookie sessions (server-side rows), **argon2id**, CSRF double-submit |
-| Frontend | **Vite 8** (Rolldown) · **React 18.3** · TypeScript · **Tailwind 3.4** · TanStack Query · **React Router 7** · Recharts |
+| Frontend | **Vite 8** (Rolldown) · **React 18.3** · TypeScript · **Tailwind 4** (CSS-first config) · TanStack Query · **React Router 7** · Recharts |
 | i18n | Custom typed dictionary under `src/i18n` (`@/i18n`), French, locale-aware Intl formatters |
 | Proxy | **Caddy** (auto-HTTPS) |
 | Orchestration | Docker Compose (`db`, `backend`, `frontend`, `caddy`, `db-backup`) |

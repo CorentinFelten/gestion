@@ -182,7 +182,7 @@ function MatrixView({
     <Card className="overflow-hidden">
       <p className="px-4 pt-3 text-xs text-gray-400 sm:hidden">{t('tally.matrix')} →</p>
       <div className="scroll-touch overflow-x-auto">
-        <table className="w-full min-w-[36rem] border-collapse text-sm">
+        <table className="w-full min-w-xl border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-800">
               <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left dark:bg-[#141A24]">

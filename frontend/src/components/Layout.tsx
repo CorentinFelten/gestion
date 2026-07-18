@@ -195,7 +195,7 @@ export default function Layout() {
       {open ? (
         <div className="lg:hidden">
           <div
-            className="animate-shell-fade-in fixed inset-0 z-40 bg-gray-900/50 backdrop-blur-sm"
+            className="animate-shell-fade-in fixed inset-0 z-40 bg-gray-900/50 backdrop-blur-xs"
             onClick={closeDrawer}
             aria-hidden="true"
           />

@@ -307,7 +307,7 @@ function PinnedCurrenciesSection({
           <Field
             label={t('settings.pinnedCurrenciesAdd')}
             htmlFor="pin-add"
-            className="min-w-[14rem] flex-1"
+            className="min-w-56 flex-1"
           >
             <Select
               id="pin-add"
@@ -559,7 +559,7 @@ function InviteMemberForm({ householdId }: { householdId: string }) {
     <div>
       <Eyebrow>{t('settings.inviteSomeone')}</Eyebrow>
       <form onSubmit={submitInvite} className="mt-3 flex flex-wrap items-end gap-3">
-        <Field label={t('settings.chooseUser')} htmlFor="i-user" className="min-w-[14rem] flex-1">
+        <Field label={t('settings.chooseUser')} htmlFor="i-user" className="min-w-56 flex-1">
           <Select
             id="i-user"
             value={invitedUserId}

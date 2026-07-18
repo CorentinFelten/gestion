@@ -120,7 +120,7 @@ export function SplitEditor({
                 type="checkbox"
                 checked={selected}
                 onChange={(e) => update(m.userId, { selected: e.target.checked })}
-                className="h-4 w-4 shrink-0 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                className="h-4 w-4 shrink-0 rounded-sm border-gray-300 text-teal-600 focus:ring-teal-500"
                 aria-label={t('transactions.includeMember', { name: m.displayName })}
               />
               <Avatar name={m.displayName} id={m.userId} size="sm" />
@@ -135,7 +135,7 @@ export function SplitEditor({
                     step={type === 'exact' ? Math.pow(10, -digits) : type === 'percent' ? 0.1 : 1}
                     value={draft?.value ?? ''}
                     onChange={(e) => update(m.userId, { value: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-right font-mono text-sm tnum focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 dark:border-gray-700 dark:bg-[#0F141C]"
+                    className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-right font-mono text-sm tnum focus:border-teal-500 focus:outline-hidden focus:ring-1 focus:ring-teal-500 dark:border-gray-700 dark:bg-[#0F141C]"
                   />
                   <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
                     {suffix}

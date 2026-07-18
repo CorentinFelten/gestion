@@ -287,7 +287,7 @@ export function TransactionModal({
           />
         </Field>
 
-        <div className="sticky bottom-0 -mx-5 -mb-5 flex justify-end gap-2 border-t border-gray-100 bg-white/95 px-5 py-4 backdrop-blur dark:border-gray-800 dark:bg-[#141A24]/95 sm:-mx-6 sm:px-6">
+        <div className="sticky bottom-0 -mx-5 -mb-5 flex justify-end gap-2 border-t border-gray-100 bg-white/95 px-5 py-4 backdrop-blur-sm dark:border-gray-800 dark:bg-[#141A24]/95 sm:-mx-6 sm:px-6">
           <Button type="button" variant="ghost" onClick={onClose} className="flex-1 sm:flex-none">
             {t('common.cancel')}
           </Button>

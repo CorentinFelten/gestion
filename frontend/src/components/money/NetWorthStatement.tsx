@@ -23,7 +23,7 @@ export function NetWorthStatement({ data }: { data: NetWorth }) {
     <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
       {/* Statement head */}
       <div className="relative border-b border-gray-200 px-6 py-7 dark:border-gray-800 sm:px-8">
-        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0" />
+        <div className="absolute inset-x-0 top-0 h-0.5 bg-linear-to-r from-amber-500/0 via-amber-500 to-amber-500/0" />
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <Eyebrow>

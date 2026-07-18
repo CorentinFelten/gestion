@@ -66,7 +66,7 @@ export function AuthShell({
           <p className="mb-6 max-w-sm text-2xl font-bold leading-snug tracking-tight">
             {t('auth.brandTagline')}
           </p>
-          <div className="max-w-sm space-y-3 rounded-2xl bg-white/[0.04] p-5 ring-1 ring-white/10">
+          <div className="max-w-sm space-y-3 rounded-2xl bg-white/4 p-5 ring-1 ring-white/10">
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-white/50">
               {t('auth.brandLedgerLabel')}
             </p>

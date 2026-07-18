@@ -149,7 +149,7 @@ function CategoryManager({
       ) : null}
 
       <form onSubmit={submit} className="mt-5 flex flex-wrap items-end gap-3">
-        <Field label={t('settings.categoryName')} htmlFor="cat-name" className="min-w-[12rem] flex-1">
+        <Field label={t('settings.categoryName')} htmlFor="cat-name" className="min-w-48 flex-1">
           <Input
             id="cat-name"
             value={name}

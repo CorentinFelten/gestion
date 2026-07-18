@@ -134,7 +134,7 @@ export function Button({
 
 // ── Form fields ──────────────────────────────────────────────────────────────
 const FIELD_BASE =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 disabled:opacity-60';
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-xs outline-hidden transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 disabled:opacity-60';
 
 export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
   return (
@@ -222,7 +222,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(opt.value)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               active
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white'
+                ? 'bg-white text-gray-900 shadow-xs dark:bg-gray-700 dark:text-white'
                 : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
@@ -380,7 +380,7 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-gray-900/50 backdrop-blur-sm sm:items-start sm:p-6 md:p-8">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-gray-900/50 backdrop-blur-xs sm:items-start sm:p-6 md:p-8">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={dialogRef}
@@ -388,7 +388,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-800 dark:bg-[#141A24] sm:my-4 sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${
+        className={`relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-gray-200 bg-white shadow-xl outline-hidden dark:border-gray-800 dark:bg-[#141A24] sm:my-4 sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${
           wide ? 'sm:max-w-2xl' : 'sm:max-w-lg'
         }`}
       >

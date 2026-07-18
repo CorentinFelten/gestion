@@ -43,7 +43,7 @@ export function MoneyAmount({
     md: 'text-base',
     lg: 'text-xl font-semibold',
     xl: 'text-3xl font-semibold',
-    hero: 'text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight break-words',
+    hero: 'text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight wrap-break-word',
   }[size];
 
   const text =

@@ -667,7 +667,7 @@ export function MoneyTransactionForm({
                   setLinkOpen(e.target.checked);
                   if (!e.target.checked) setLinkedTransactionId('');
                 }}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                className="mt-0.5 h-4 w-4 rounded-sm border-gray-300 text-amber-600 focus:ring-amber-500"
               />
               <span>
                 <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
