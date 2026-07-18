@@ -11,6 +11,7 @@ import SettleUpPage from '@/pages/SettleUpPage';
 import MoneyOverviewPage from '@/pages/MoneyOverviewPage';
 import MoneyAccountsPage from '@/pages/MoneyAccountsPage';
 import MoneyAddPage from '@/pages/MoneyAddPage';
+import { MoneyTxModalProvider } from '@/components/money/MoneyTxModal';
 import SettingsPage from '@/pages/SettingsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
@@ -63,10 +64,13 @@ export default function App() {
             <Route path="/settle-up" element={<SettleUpPage />} />
             <Route path="/reports" element={<ReportsPage />} />
 
-            <Route path="/money" element={<MoneyOverviewPage />} />
-            <Route path="/money/accounts" element={<MoneyAccountsPage />} />
-            <Route path="/money/add" element={<MoneyAddPage />} />
-            <Route path="/money/stats" element={<MoneyStatsPage />} />
+            {/* All "My Money" routes share one transaction Add/Edit overlay. */}
+            <Route element={<MoneyTxModalProvider />}>
+              <Route path="/money" element={<MoneyOverviewPage />} />
+              <Route path="/money/accounts" element={<MoneyAccountsPage />} />
+              <Route path="/money/add" element={<MoneyAddPage />} />
+              <Route path="/money/stats" element={<MoneyStatsPage />} />
+            </Route>
 
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

@@ -1,5 +1,4 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   accountTypeLabel,
@@ -26,6 +25,7 @@ import {
   useDeletePersonalTransaction,
 } from '@/hooks/usePersonalTx';
 import { AccountLedger } from '@/components/money/AccountLedger';
+import { useMoneyTxModal } from '@/components/money/MoneyTxModal';
 import { MoneyAmount } from '@/components/money/MoneyAmount';
 import { PayoffBalanceChart } from '@/components/money/charts';
 import { ACCOUNT_TYPE_ICON } from '@/components/money/format';
@@ -239,7 +239,7 @@ function SelectedLedger({
   accountsById: Map<string, Account>;
 }) {
   const { t } = useT();
-  const navigate = useNavigate();
+  const txModal = useMoneyTxModal();
   const account = accountsById.get(accountId)!;
   const txs = usePersonalTransactions({ accountId });
   const balance = useAccountBalance(accountId);
@@ -288,7 +288,7 @@ function SelectedLedger({
           transactions={txs.data ?? []}
           accountsById={accountsById}
           deletingId={del.isPending ? del.variables : null}
-          onEdit={(tx) => navigate('/money/add', { state: { editing: tx } })}
+          onEdit={(tx) => txModal.open(tx)}
           onDelete={(id) => {
             if (window.confirm(t('accounts.deleteConfirm'))) {
               del.mutate(id);
@@ -297,12 +297,13 @@ function SelectedLedger({
         />
       )}
       <div className="mt-3">
-        <Link
-          to="/money/add"
+        <button
+          type="button"
+          onClick={() => txModal.open(null, { accountId })}
           className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
         >
           + {t('accounts.addToAccount')}
-        </Link>
+        </button>
       </div>
     </div>
   );

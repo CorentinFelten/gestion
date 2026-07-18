@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -302,6 +303,116 @@ export function EmptyBlock({
         <p className="mt-1 max-w-sm text-sm text-gray-500 dark:text-gray-400">{message}</p>
       ) : null}
       {action ? <div className="mt-4">{action}</div> : null}
+    </div>
+  );
+}
+
+// ── Modal / bottom-sheet ─────────────────────────────────────────────────────
+/**
+ * Overlay dialog for the "My Money" area. Bottom-sheet on mobile, centered
+ * card on ≥sm. Escape to close, body-scroll lock, focus trap + restore — mirrors
+ * the household `Modal` and the mobile drawer in `Layout.tsx`.
+ */
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  wide = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  const { t } = useT();
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const node = dialogRef.current;
+
+    const focusables = (): HTMLElement[] =>
+      node
+        ? Array.from(
+            node.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => el.offsetParent !== null)
+        : [];
+
+    (focusables()[0] ?? node)?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const items = focusables();
+        if (items.length === 0) {
+          e.preventDefault();
+          node?.focus();
+          return;
+        }
+        const active = document.activeElement as HTMLElement | null;
+        const idx = active ? items.indexOf(active) : -1;
+        if (e.shiftKey && idx <= 0) {
+          e.preventDefault();
+          items[items.length - 1].focus();
+        } else if (!e.shiftKey && idx === items.length - 1) {
+          e.preventDefault();
+          items[0].focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+      previouslyFocused?.focus?.();
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-gray-900/50 backdrop-blur-sm sm:items-start sm:p-6 md:p-8">
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-800 dark:bg-[#141A24] sm:my-4 sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${
+          wide ? 'sm:max-w-2xl' : 'sm:max-w-lg'
+        }`}
+      >
+        <div className="flex justify-center pt-2 sm:hidden" aria-hidden="true">
+          <span className="h-1 w-10 rounded-full bg-gray-300 dark:bg-gray-700" />
+        </div>
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800 sm:px-6">
+          <h2 className="text-lg font-bold tracking-tight">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('common.close')}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
+          >
+            ✕
+          </button>
+        </div>
+        <div
+          className="overflow-y-auto px-5 py-5 sm:px-6"
+          style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+        >
+          {children}
+        </div>
+      </div>
     </div>
   );
 }

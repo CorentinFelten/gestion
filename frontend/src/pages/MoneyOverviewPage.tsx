@@ -7,6 +7,7 @@ import { useStatsSummary } from '@/hooks/usePersonalStats';
 import { NetWorthStatement } from '@/components/money/NetWorthStatement';
 import { MonthTransactions } from '@/components/money/MonthTransactions';
 import { MoneyAmount } from '@/components/money/MoneyAmount';
+import { useMoneyTxModal } from '@/components/money/MoneyTxModal';
 import {
   Button,
   Card,
@@ -24,6 +25,7 @@ export default function MoneyOverviewPage() {
   const { user } = useAuth();
   const { t } = useT();
   const f = useFormat();
+  const txModal = useMoneyTxModal();
   const profileCurrency = user?.preferredCurrency ?? 'EUR';
 
   const netWorth = useNetWorth();
@@ -49,9 +51,9 @@ export default function MoneyOverviewPage() {
             <Link to="/money/accounts">
               <Button variant="outline">{t('accounts.title')}</Button>
             </Link>
-            <Link to="/money/add">
-              <Button variant="primary">+ {t('nav.addTransaction')}</Button>
-            </Link>
+            <Button variant="primary" onClick={() => txModal.open()}>
+              + {t('nav.addTransaction')}
+            </Button>
           </>
         }
       />
@@ -145,9 +147,9 @@ export default function MoneyOverviewPage() {
             title={t('money.noActivityTitle')}
             message={t('money.noActivityMessage')}
             action={
-              <Link to="/money/add">
-                <Button variant="primary">{t('nav.addTransaction')}</Button>
-              </Link>
+              <Button variant="primary" onClick={() => txModal.open()}>
+                {t('nav.addTransaction')}
+              </Button>
             }
           />
         )}
