@@ -17,6 +17,7 @@ import {
   useUpdatePersonalTransaction,
 } from '@/hooks/usePersonalTx';
 import {
+  useCreatePersonalCategory,
   useFxRate,
   useLinkableSharedTransactions,
   usePersonalCategories,
@@ -73,6 +74,7 @@ export function MoneyTransactionForm({
   const create = useCreatePersonalTransaction();
   const update = useUpdatePersonalTransaction();
   const categories = usePersonalCategories();
+  const createCategory = useCreatePersonalCategory();
 
   // Active accounts, plus the edited transaction's own accounts even if archived
   // (so an erroneous row on a since-closed account is still editable).
@@ -115,6 +117,10 @@ export function MoneyTransactionForm({
     editing?.linkedTransactionId ?? '',
   );
   const [justSaved, setJustSaved] = useState(false);
+
+  // Inline "new category" mini-form.
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   // Preserve a foreign entry currency through the first account-sync when editing.
   const preserveEntryCurrency = useRef(!!editing?.currencyOriginal);
@@ -220,6 +226,21 @@ export function MoneyTransactionForm({
     setLinkOpen(false);
     setTransferAmount('');
     setTransferTouched(false);
+  }
+
+  function submitNewCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    createCategory.mutate(
+      { name, flow: type === 'income' ? 'income' : 'expense' },
+      {
+        onSuccess: (created) => {
+          setCategoryId(created.id);
+          setNewCategoryName('');
+          setNewCategoryOpen(false);
+        },
+      },
+    );
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -361,6 +382,7 @@ export function MoneyTransactionForm({
           onChange={(v) => {
             setType(v);
             setCategoryId('');
+            setNewCategoryOpen(false);
             if (v !== 'transfer') setDestId('');
           }}
           options={[
@@ -541,6 +563,55 @@ export function MoneyTransactionForm({
                   </option>
                 ))}
               </Select>
+              {newCategoryOpen ? (
+                <div className="mt-2 flex gap-2">
+                  <TextInput
+                    aria-label={t('money.newCategoryName')}
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        submitNewCategory();
+                      }
+                    }}
+                    placeholder={t('money.newCategoryPlaceholder')}
+                    className="min-w-0 flex-1"
+                    autoFocus
+                  />
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={submitNewCategory}
+                    disabled={!newCategoryName.trim() || createCategory.isPending}
+                  >
+                    {createCategory.isPending ? t('common.saving') : t('common.create')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setNewCategoryOpen(false);
+                      setNewCategoryName('');
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setNewCategoryOpen(true)}
+                  className="mt-2 text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+                >
+                  + {t('money.newCategory')}
+                </button>
+              )}
+              {createCategory.isError ? (
+                <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                  {errorMessage(createCategory.error)}
+                </p>
+              ) : null}
             </Field>
             <Field
               label={type === 'income' ? t('money.source') : t('money.payee')}

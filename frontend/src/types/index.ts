@@ -97,6 +97,15 @@ export interface Category {
   color: string | null;
 }
 
+/** Payload for creating a user category (`POST /categories`, personal scope). */
+export interface CreateCategoryInput {
+  name: string;
+  /** User categories are expense or income only (never the internal `any`). */
+  flow: 'expense' | 'income';
+  icon?: string | null;
+  color?: string | null;
+}
+
 // ── Shared transactions & splits ──────────────────────────────────────────────
 export interface SplitInput {
   userId: string;

@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { csrfHeaders } from '@/components/household/csrf';
 import { useFxPreview } from '@/hooks/useTransactions';
-import type { Category, Household, Transaction } from '@/types';
+import type { Category, CreateCategoryInput, Household, Transaction } from '@/types';
 
 /**
  * Live FX preview for foreign-currency entry (PLAN §3.1). Re-exported from the
@@ -29,6 +30,25 @@ export function usePersonalCategories() {
       } catch {
         return [] as Category[];
       }
+    },
+  });
+}
+
+/**
+ * Create a private personal category (`POST /categories`, owner-scoped). Used by
+ * the Add-transaction form so a missing category can be created inline without
+ * leaving the flow. Invalidates the personal-category cache on success.
+ */
+export function useCreatePersonalCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateCategoryInput) => {
+      const headers = await csrfHeaders();
+      const { data } = await api.post<Category>('/categories', input, { headers });
+      return data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me', 'categories'] });
     },
   });
 }

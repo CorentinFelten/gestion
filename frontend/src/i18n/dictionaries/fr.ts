@@ -463,6 +463,10 @@ export const fr = {
     filterDeleteConfirm: 'Supprimer le filtre « {{name}} » ?',
     filterNoMatchesTitle: 'Aucun résultat',
     filterNoMatchesMessage: 'Aucune transaction ne correspond à ces filtres. Essayez de les assouplir.',
+    // Inline category creation (Add-transaction form)
+    newCategory: 'Nouvelle catégorie',
+    newCategoryName: 'Nom de la nouvelle catégorie',
+    newCategoryPlaceholder: 'ex. Abonnements',
     figuresNote:
       'Montants affichés en {{currency}}. Taux d’épargne = (revenus − dépenses) ÷ revenus.',
     // Net-worth statement
