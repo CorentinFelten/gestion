@@ -64,7 +64,7 @@ export function NetWorthStatement({ data }: { data: NetWorth }) {
             return (
               <li
                 key={acc.accountId}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 sm:flex-nowrap"
+                className="flex items-center gap-x-4 px-4 py-3"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span
@@ -77,41 +77,47 @@ export function NetWorthStatement({ data }: { data: NetWorth }) {
                     <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                       {acc.name}
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="truncate text-xs text-gray-400">
                       {accountTypeLabel(acc.type)}
                       {isLiabilityAccount(acc.type) ? ` · ${t('money.liability')}` : ''} ·{' '}
                       {acc.nativeCurrency}
                     </p>
                   </div>
                 </div>
-                <div className="w-32 text-right sm:w-40">
-                  <MoneyAmount
-                    value={acc.nativeBalance}
-                    currency={acc.nativeCurrency}
-                    size="sm"
-                    className="font-medium"
-                  />
-                </div>
-                <div className="w-32 text-right sm:w-40">
-                  {converted ? (
-                    <>
-                      <span className={tabular('text-sm text-gray-500 dark:text-gray-400')}>
-                        {f.money(acc.convertedBalance, data.profileCurrency)}
-                      </span>
-                      {acc.fxRate && acc.fxRateDate ? (
-                        <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">
-                          {t('money.rateLine', {
-                            from: acc.nativeCurrency,
-                            rate: f.number(acc.fxRate, { maximumFractionDigits: 6 }),
-                            to: data.profileCurrency,
-                            date: f.date(acc.fxRateDate),
-                          })}
+                {/* Amounts: stacked on mobile (native over converted, right-aligned)
+                    so nothing collides at narrow widths; a two-column table ≥sm. */}
+                <div className="flex shrink-0 flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="text-right sm:w-40">
+                    <MoneyAmount
+                      value={acc.nativeBalance}
+                      currency={acc.nativeCurrency}
+                      size="sm"
+                      className="font-medium"
+                    />
+                  </div>
+                  <div className="text-right sm:w-40">
+                    {converted ? (
+                      <>
+                        <span className={tabular('text-sm text-gray-500 dark:text-gray-400')}>
+                          {f.money(acc.convertedBalance, data.profileCurrency)}
                         </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-sm text-gray-300 dark:text-gray-600">-</span>
-                  )}
+                        {acc.fxRate && acc.fxRateDate ? (
+                          <span className="mt-0.5 hidden text-[11px] text-gray-400 dark:text-gray-500 sm:block">
+                            {t('money.rateLine', {
+                              from: acc.nativeCurrency,
+                              rate: f.number(acc.fxRate, { maximumFractionDigits: 6 }),
+                              to: data.profileCurrency,
+                              date: f.date(acc.fxRateDate),
+                            })}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="hidden text-sm text-gray-300 dark:text-gray-600 sm:inline">
+                        -
+                      </span>
+                    )}
+                  </div>
                 </div>
               </li>
             );
