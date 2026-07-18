@@ -9,7 +9,7 @@ COPY . .
 RUN npm run build
 
 # ── Runtime stage (nginx serves the static SPA) ──────────────────────────────
-FROM nginx:1.27.5-alpine AS runtime
+FROM nginx:1.31.3-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
