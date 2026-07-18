@@ -239,7 +239,7 @@ export default function DashboardPage() {
                   />
                   <Tooltip
                     cursor={{ fill: 'rgba(13,148,136,0.08)' }}
-                    formatter={(v: number) => f.money(v, base)}
+                    formatter={(v) => f.money(v as number, base)}
                     contentStyle={{
                       borderRadius: 12,
                       border: '1px solid rgba(148,163,184,0.3)',

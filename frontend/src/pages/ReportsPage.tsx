@@ -157,7 +157,7 @@ export default function ReportsPage() {
                     />
                     <Tooltip
                       cursor={{ fill: 'rgba(13,148,136,0.08)' }}
-                      formatter={(v: number) => f.money(v, base)}
+                      formatter={(v) => f.money(v as number, base)}
                       contentStyle={{ borderRadius: 12, border: '1px solid rgba(148,163,184,0.3)', fontSize: 12 }}
                     />
                     <Bar dataKey="value" radius={[6, 6, 0, 0]} fill={CHART_COLORS[0]} />
@@ -180,7 +180,7 @@ export default function ReportsPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(v: number, n: string) => [f.money(v, base), n]}
+                      formatter={(v, n) => [f.money(v as number, base), n as string]}
                       contentStyle={{ borderRadius: 12, border: '1px solid rgba(148,163,184,0.3)', fontSize: 12 }}
                     />
                   </PieChart>
