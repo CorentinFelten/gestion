@@ -122,7 +122,9 @@ export default function MoneyAccountsPage() {
               const isSelected = acc.id === selectedId;
               return (
                 <Card as="li" key={acc.id} className={isSelected ? 'ring-1 ring-amber-500/40' : ''}>
-                  <div className="flex flex-wrap items-center gap-3 p-4">
+                  {/* Mobile: name on its own line, then a row with balance +
+                      actions (avoids the name/amount collision). ≥sm: one row. */}
+                  <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
                     <button
                       type="button"
                       onClick={() => setSelectedId(isSelected ? null : acc.id)}
@@ -136,7 +138,7 @@ export default function MoneyAccountsPage() {
                         {ACCOUNT_TYPE_ICON[acc.type]}
                       </span>
                       <span className="min-w-0">
-                        <span className="flex items-center gap-2">
+                        <span className="flex flex-wrap items-center gap-2">
                           <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                             {acc.name}
                           </span>
@@ -157,30 +159,40 @@ export default function MoneyAccountsPage() {
                       </span>
                     </button>
 
-                    <div className="text-right">
-                      {bal !== undefined ? (
-                        <MoneyAmount value={bal} currency={acc.currency} className="font-semibold" />
-                      ) : (
-                        <span className="text-sm text-gray-300 dark:text-gray-600">-</span>
-                      )}
+                    <div className="flex items-center justify-between gap-2 sm:justify-end">
+                      <div className="text-right">
+                        {bal !== undefined ? (
+                          <MoneyAmount
+                            value={bal}
+                            currency={acc.currency}
+                            className="font-semibold"
+                          />
+                        ) : (
+                          <span className="text-sm text-gray-300 dark:text-gray-600">-</span>
+                        )}
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingId((id) => (id === acc.id ? null : acc.id))}
+                          className="rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                        >
+                          {editingId === acc.id ? t('common.close') : t('common.edit')}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateAccount.mutate({ id: acc.id, isActive: !acc.isActive })
+                          }
+                          disabled={updateAccount.isPending}
+                          className="rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                        >
+                          {acc.isActive ? t('common.archive') : t('accounts.restore')}
+                        </button>
+                      </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setEditingId((id) => (id === acc.id ? null : acc.id))}
-                      className="rounded-md px-2 py-1 text-xs font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                    >
-                      {editingId === acc.id ? t('common.close') : t('common.edit')}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => updateAccount.mutate({ id: acc.id, isActive: !acc.isActive })}
-                      disabled={updateAccount.isPending}
-                      className="rounded-md px-2 py-1 text-xs font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                    >
-                      {acc.isActive ? t('common.archive') : t('accounts.restore')}
-                    </button>
                   </div>
 
                   {editingId === acc.id ? (
