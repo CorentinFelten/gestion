@@ -15,7 +15,7 @@ const householdNav: NavItem[] = [
 const moneyNav: NavItem[] = [
   { to: '/money', labelKey: 'nav.overview', end: true },
   { to: '/money/accounts', labelKey: 'nav.accounts' },
-  { to: '/money/add', labelKey: 'nav.addTransaction' },
+  { to: '/money/transactions', labelKey: 'nav.moneyTransactions' },
   { to: '/money/stats', labelKey: 'nav.statistics' },
 ];
 

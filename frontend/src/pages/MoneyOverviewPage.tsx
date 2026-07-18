@@ -165,10 +165,10 @@ export default function MoneyOverviewPage() {
         <SectionTitle
           aside={
             <Link
-              to="/money/add"
+              to="/money/transactions"
               className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
             >
-              + {t('nav.addTransaction')}
+              {t('money.viewAllTransactions')} →
             </Link>
           }
         >
