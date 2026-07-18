@@ -8,6 +8,7 @@ import type { Account, PersonalTransaction, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FxService } from '../fx/fx.service';
 import { dateToISO, todayISO, toUtcDate } from '../fx/date.util';
+import { computePayoffSchedule } from './personal.payoff.util';
 import type {
   AccountBalanceDto,
   AccountDto,
@@ -18,7 +19,6 @@ import type {
   NetWorthDto,
   NetWorthHistoryDto,
   NetWorthSnapshotDto,
-  PayoffMonthDto,
   PayoffScheduleDto,
   PersonalTransactionDto,
   PersonalTransactionFilter,
@@ -122,7 +122,7 @@ export class PersonalService {
       fxRate: t.fxRate !== null ? this.dec(t.fxRate).toString() : null,
       fxRateDate: this.dateOnly(t.fxRateDate),
       fxSource: t.fxSource,
-      txnDate: t.txnDate.toISOString().slice(0, 10),
+      txnDate: dateToISO(t.txnDate),
       payeeSource: t.payeeSource,
       notes: t.notes,
       transferAccountId: t.transferAccountId,
@@ -257,18 +257,11 @@ export class PersonalService {
   }
 
   /**
-   * Credit-card payoff projection (#9): amortize the current debt in the
-   * account's native currency at its APR, paying `monthlyPayment` each month
-   * (interest first, then principal). All math is decimal.js; interest and
-   * principal are rounded to 2 dp per month like a real statement.
-   *
-   * A credit account carrying spend has a NEGATIVE balance, so the amount owed
-   * is `-balance`. If the payment doesn't cover the first month's interest the
-   * balance never shrinks (`neverPaysOff`); the simulation is also capped so a
-   * pathological input can't loop forever.
+   * Credit-card payoff projection (#9). Resolves the account's current debt in
+   * its native currency (a credit account carrying spend has a NEGATIVE balance,
+   * so the amount owed is `-balance`), then delegates the amortization to the
+   * pure `computePayoffSchedule` helper.
    */
-  private static readonly PAYOFF_MAX_MONTHS = 1200;
-
   async getPayoffSchedule(
     userId: string,
     accountId: string,
@@ -278,65 +271,15 @@ export class PersonalService {
     if (account.type !== 'credit_card') {
       throw new BadRequestException('Payoff projection is only available for credit-card accounts');
     }
-    const monthlyPayment = this.dec(monthlyPaymentStr);
     const balanceNative = await this.computeBalance(userId, account);
     const owed = balanceNative.isNegative() ? balanceNative.negated() : new Decimal(0);
-    const apr = account.interestRate !== null ? this.dec(account.interestRate) : new Decimal(0);
-    const monthlyRate = apr.div(100).div(12);
-
-    const base = {
+    return computePayoffSchedule({
       accountId: account.id,
       currency: account.currency,
-      startingBalance: owed.toDecimalPlaces(2).toString(),
-      monthlyPayment: monthlyPayment.toDecimalPlaces(2).toString(),
-      interestRate: apr.toString(),
-    };
-
-    if (owed.lte(0)) {
-      return { ...base, months: 0, totalInterest: '0', totalPaid: '0', neverPaysOff: false, schedule: [] };
-    }
-    if (monthlyPayment.lte(owed.mul(monthlyRate))) {
-      // Payment never even covers the interest → the debt can't be cleared.
-      return { ...base, months: 0, totalInterest: '0', totalPaid: '0', neverPaysOff: true, schedule: [] };
-    }
-
-    const schedule: PayoffMonthDto[] = [];
-    let balance = owed;
-    let totalInterest = new Decimal(0);
-    let totalPaid = new Decimal(0);
-    let month = 0;
-    while (balance.gt(0) && month < PersonalService.PAYOFF_MAX_MONTHS) {
-      month += 1;
-      const interest = balance.mul(monthlyRate).toDecimalPlaces(2);
-      const due = balance.plus(interest);
-      let payment = monthlyPayment;
-      let principal: Decimal;
-      if (payment.gte(due)) {
-        payment = due; // final (partial) payment
-        principal = balance;
-        balance = new Decimal(0);
-      } else {
-        principal = payment.minus(interest);
-        balance = balance.minus(principal);
-      }
-      totalInterest = totalInterest.plus(interest);
-      totalPaid = totalPaid.plus(payment);
-      schedule.push({
-        month,
-        interest: interest.toString(),
-        principal: principal.toDecimalPlaces(2).toString(),
-        balance: balance.toDecimalPlaces(2).toString(),
-      });
-    }
-    const neverPaysOff = balance.gt(0);
-    return {
-      ...base,
-      months: neverPaysOff ? 0 : month,
-      totalInterest: totalInterest.toDecimalPlaces(2).toString(),
-      totalPaid: totalPaid.toDecimalPlaces(2).toString(),
-      neverPaysOff,
-      schedule: neverPaysOff ? [] : schedule,
-    };
+      owed,
+      apr: account.interestRate !== null ? this.dec(account.interestRate) : new Decimal(0),
+      monthlyPayment: this.dec(monthlyPaymentStr),
+    });
   }
 
   // ── Personal transactions ─────────────────────────────────────────────────
@@ -571,7 +514,7 @@ export class PersonalService {
               : null,
         currencyOriginal:
           dto.currencyOriginal !== undefined ? dto.currencyOriginal : existing.currencyOriginal,
-        txnDate: dto.txnDate ?? existing.txnDate.toISOString().slice(0, 10),
+        txnDate: dto.txnDate ?? dateToISO(existing.txnDate),
         transferAccountId:
           dto.transferAccountId !== undefined
             ? dto.transferAccountId
@@ -732,7 +675,7 @@ export class PersonalService {
     // Net worth is only as fresh as its stalest input rate: start at today (the
     // ceiling, correct when nothing needs converting) and pull `asOf` back to the
     // oldest latest-rate date actually used (e.g. Friday's rate over a weekend).
-    let asOf = new Date().toISOString().slice(0, 10);
+    let asOf = todayISO();
     let total = new Decimal(0);
     const breakdown: NetWorthAccountDto[] = [];
 
