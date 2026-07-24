@@ -28,6 +28,39 @@ describe('FrankfurterProvider (mocked fetch)', () => {
     expect(quote.source).toBe('frankfurter');
   });
 
+  it('parses a time-series into one quote per published day', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse({
+        amount: 1,
+        base: 'USD',
+        start_date: '2026-03-11',
+        end_date: '2026-03-13',
+        rates: {
+          '2026-03-11': { EUR: 0.9 },
+          '2026-03-12': { EUR: 0.91 },
+          '2026-03-13': { EUR: 0.918 },
+        },
+      }),
+    );
+    const provider = new FrankfurterProvider('https://example.test/v1', 1000);
+
+    const series = await provider.getRateSeries('USD', 'EUR', '2026-03-11', '2026-03-13');
+
+    expect(series).toHaveLength(3);
+    expect(series.map((q) => q.rateDate).sort()).toEqual([
+      '2026-03-11', '2026-03-12', '2026-03-13',
+    ]);
+    expect(series.find((q) => q.rateDate === '2026-03-13')?.rate.toString()).toBe('0.918');
+    expect(series[0].source).toBe('frankfurter');
+  });
+
+  it('getRateSeries short-circuits same-currency without fetching', async () => {
+    const spy = jest.spyOn(global, 'fetch');
+    const provider = new FrankfurterProvider('https://example.test/v1', 1000);
+    expect(await provider.getRateSeries('EUR', 'EUR', '2026-03-01', '2026-03-13')).toEqual([]);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('maps a 404 to RateUnavailableError (drives walk-back)', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ message: 'not found' }, 404));
     const provider = new FrankfurterProvider('https://example.test/v1', 1000);

@@ -7,7 +7,8 @@ interface FrankfurterResponse {
   amount?: number;
   base?: string;
   date?: string;
-  rates?: Record<string, number>;
+  // Single-date: { EUR: 0.9 }. Time-series: { "2024-01-02": { EUR: 0.9 }, ... }.
+  rates?: Record<string, number | Record<string, number>>;
 }
 
 /**
@@ -37,6 +38,29 @@ export class FrankfurterProvider implements RateProvider {
     if (from === to) return { rate: new Decimal(1), rateDate: todayISO(), source: this.name };
     const url = `${this.baseUrl}/latest?base=${from}&symbols=${to}`;
     return this.parse(await this.fetchJson(url), to);
+  }
+
+  /**
+   * Time-series: all published rates in `[start, end]` via
+   * `/{start}..{end}?base=X&symbols=Y`. The response nests each date under its own
+   * key (`rates["2024-01-02"] = { EUR: 0.9 }`); weekends/holidays are simply
+   * absent (the caller forward-fills them).
+   */
+  async getRateSeries(from: string, to: string, start: string, end: string): Promise<RateQuote[]> {
+    if (from === to) return [];
+    const url = `${this.baseUrl}/${start}..${end}?base=${from}&symbols=${to}`;
+    const data = await this.fetchJson(url);
+    const rates = data?.rates;
+    if (!rates || typeof rates !== 'object') {
+      throw new RateUnavailableError(`frankfurter: no series for ${to} in response`);
+    }
+    const out: RateQuote[] = [];
+    for (const [date, perDate] of Object.entries(rates)) {
+      const raw = (perDate as Record<string, number>)?.[to];
+      if (raw === undefined || raw === null) continue;
+      out.push({ rate: new Decimal(String(raw)), rateDate: date, source: this.name });
+    }
+    return out;
   }
 
   private parse(data: FrankfurterResponse, to: string): RateQuote {

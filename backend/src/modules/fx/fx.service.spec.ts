@@ -42,6 +42,22 @@ class FakeExchangeRateRepo {
     return matches[0] ?? null;
   });
 
+  findMany = jest.fn(async ({ where, orderBy }: any) => {
+    let matches = this.rows.filter((r) => r.base === where.base && r.quote === where.quote);
+    if (where.rateDate?.gte) {
+      const gte = where.rateDate.gte.getTime();
+      matches = matches.filter((r) => r.rateDate.getTime() >= gte);
+    }
+    if (where.rateDate?.lte) {
+      const lte = where.rateDate.lte.getTime();
+      matches = matches.filter((r) => r.rateDate.getTime() <= lte);
+    }
+    if (orderBy?.rateDate === 'asc') {
+      matches = [...matches].sort((a, b) => a.rateDate.getTime() - b.rateDate.getTime());
+    }
+    return matches;
+  });
+
   upsert = jest.fn(async ({ where, create, update }: any) => {
     const key = where.base_quote_rateDate_source;
     const existing = this.rows.find(
@@ -287,6 +303,84 @@ describe('FxService', () => {
       const res = await svc.convert(new Decimal('10'), 'USD', 'EUR', '2026-03-13');
       // 10 * (1/3) = 3.3333... -> 3.333333 (6dp)
       expect(res.amount.toString()).toBe('3.333333');
+    });
+  });
+
+  describe('getRateSeries', () => {
+    const seriesProvider = (name: string, quotes: RateQuote[]): RateProvider => ({
+      name,
+      getRate: jest.fn(),
+      getLatestRate: jest.fn(),
+      getRateSeries: jest.fn(async (): Promise<RateQuote[]> => quotes),
+    });
+
+    it('same currency returns [] without touching the provider', async () => {
+      const primary = seriesProvider('frankfurter', []);
+      const svc = new FxService(makePrisma(repo), primary, null);
+      const res = await svc.getRateSeries('EUR', 'EUR', '2026-03-01', '2026-03-14');
+      expect(res).toEqual([]);
+      expect(primary.getRateSeries).not.toHaveBeenCalled();
+    });
+
+    it('fetches the whole span, persists every row, and returns them sorted', async () => {
+      const primary = seriesProvider('frankfurter', [
+        { rate: new Decimal('0.92'), rateDate: '2026-03-13', source: 'frankfurter' },
+        { rate: new Decimal('0.90'), rateDate: '2026-03-11', source: 'frankfurter' },
+      ]);
+      const svc = new FxService(makePrisma(repo), primary, null);
+
+      const res = await svc.getRateSeries('USD', 'EUR', '2026-03-10', '2026-03-14');
+
+      expect(res.map((r) => r.rateDate)).toEqual(['2026-03-11', '2026-03-13']); // sorted asc
+      expect(res.map((r) => r.rate.toString())).toEqual(['0.9', '0.92']);
+      expect(repo.rows).toHaveLength(2); // both persisted
+      expect(primary.getRateSeries).toHaveBeenCalledWith('USD', 'EUR', '2026-03-10', '2026-03-14');
+    });
+
+    it('serves the cache without calling the provider when it already spans the range', async () => {
+      const mk = (d: string, rate: string) => ({
+        base: 'USD', quote: 'EUR', rateDate: new Date(`${d}T00:00:00.000Z`),
+        rate, source: 'frankfurter', fetchedAt: new Date(`${d}T02:00:00.000Z`),
+      });
+      // Cache covers the full requested span (start & end both present).
+      repo.rows.push(mk('2026-03-10', '0.90'), mk('2026-03-12', '0.91'), mk('2026-03-14', '0.93'));
+      const primary = seriesProvider('frankfurter', []);
+      const svc = new FxService(makePrisma(repo), primary, null);
+
+      const res = await svc.getRateSeries('USD', 'EUR', '2026-03-10', '2026-03-14');
+
+      expect(res.map((r) => r.rate.toString())).toEqual(['0.9', '0.91', '0.93']);
+      expect(primary.getRateSeries).not.toHaveBeenCalled(); // cache-first, no fetch
+    });
+
+    it('falls back to cached rows when the provider chain is unavailable', async () => {
+      repo.rows.push({
+        base: 'USD', quote: 'EUR', rateDate: new Date('2026-03-11T00:00:00.000Z'),
+        rate: '0.90', source: 'frankfurter', fetchedAt: new Date('2026-03-11T02:00:00.000Z'),
+      });
+      // A provider that advertises time-series but fails the call; no fallback.
+      const primary: RateProvider = {
+        name: 'frankfurter',
+        getRate: jest.fn(),
+        getLatestRate: jest.fn(),
+        getRateSeries: jest.fn(async (): Promise<RateQuote[]> => {
+          throw new RateProviderError('network down');
+        }),
+      };
+      const svc = new FxService(makePrisma(repo), primary, null);
+
+      // Range extends past the single cached row, so cache doesn't "cover" it and
+      // the provider is tried, fails, and we serve the one cached row.
+      const res = await svc.getRateSeries('USD', 'EUR', '2026-03-01', '2026-03-14');
+      expect(res.map((r) => r.rate.toString())).toEqual(['0.9']);
+    });
+
+    it('503s when the provider has no time-series support and nothing is cached', async () => {
+      // staticProvider does not implement getRateSeries (optional).
+      const svc = new FxService(makePrisma(repo), staticProvider('frankfurter', 0.9), null);
+      await expect(svc.getRateSeries('USD', 'EUR', '2026-03-01', '2026-03-14')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
     });
   });
 

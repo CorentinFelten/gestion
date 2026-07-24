@@ -215,6 +215,103 @@ export class FxService {
     return { rate: quoteResult.rate, rateDate: quoteResult.rateDate, source: quoteResult.source };
   }
 
+  /**
+   * Every published rate for `from`->`to` between `startISO` and `endISO`
+   * (inclusive), ascending by date, one entry per published business day. Used to
+   * value a historical DAILY series (the net-worth trend) at each day's OWN rate
+   * in a single provider round-trip instead of one `getRate` call per day; the
+   * caller forward-fills weekends/holidays from the nearest prior entry.
+   *
+   * Cache-first: if the `exchange_rates` cache already spans the range it is
+   * served without touching the provider (keeps repeat reads cheap & offline).
+   * Otherwise one time-series call fetches the whole range, persists every row,
+   * and returns it merged with the cache. On provider failure any cached rows for
+   * the range are served. Same-currency ⇒ `[]` (caller uses identity).
+   *
+   * NOTE: additive to the FxService contract, the frozen `getRate` / `convert` /
+   * `getLatestRate` signatures are unchanged.
+   */
+  async getRateSeries(
+    from: string,
+    to: string,
+    startISO: string,
+    endISO: string,
+  ): Promise<FxRateResult[]> {
+    const base = normalizeCurrency(from);
+    const quote = normalizeCurrency(to);
+    assertKnownCurrency(base);
+    assertKnownCurrency(quote);
+    if (!isValidDateISO(startISO)) {
+      throw new BadRequestException(`Invalid date (expected YYYY-MM-DD): ${startISO}`);
+    }
+    if (!isValidDateISO(endISO)) {
+      throw new BadRequestException(`Invalid date (expected YYYY-MM-DD): ${endISO}`);
+    }
+    if (base === quote) return [];
+    const end = endISO > todayISO() ? todayISO() : endISO;
+    if (startISO > end) return [];
+
+    const toFx = (r: { rate: unknown; rateDate: Date; source: string }): FxRateResult => ({
+      rate: new Decimal(r.rate!.toString()),
+      rateDate: dateToISO(r.rateDate),
+      source: r.source,
+    });
+    const dedupe = (list: FxRateResult[]): FxRateResult[] => {
+      const byDate = new Map<string, FxRateResult>();
+      for (const r of list) byDate.set(r.rateDate, r); // later entry (provider) wins
+      return [...byDate.values()].sort((a, b) =>
+        a.rateDate < b.rateDate ? -1 : a.rateDate > b.rateDate ? 1 : 0,
+      );
+    };
+
+    const cachedRows = await this.prisma.exchangeRate.findMany({
+      where: { base, quote, rateDate: { gte: toUtcDate(startISO), lte: toUtcDate(end) } },
+      orderBy: { rateDate: 'asc' },
+    });
+    const cached = cachedRows.map(toFx);
+    // Cache "covers" the range when it begins within a few days of the start and
+    // extends to within a few days of the end (slack absorbs weekends/holidays).
+    if (
+      cached.length > 0 &&
+      cached[0].rateDate <= this.shiftISO(startISO, 4) &&
+      cached[cached.length - 1].rateDate >= this.shiftISO(end, -4)
+    ) {
+      return dedupe(cached);
+    }
+
+    try {
+      const quotes = await this.withFallback(
+        (provider) =>
+          provider.getRateSeries
+            ? provider.getRateSeries(base, quote, startISO, end)
+            : Promise.reject(new RateUnavailableError(`${provider.name}: no time-series support`)),
+        `series ${base}->${quote}@${startISO}..${end}`,
+      );
+      for (const q of quotes) await this.persist(base, quote, q);
+      return dedupe([
+        ...cached,
+        ...quotes.map((q) => ({ rate: q.rate, rateDate: q.rateDate, source: q.source })),
+      ]);
+    } catch (err) {
+      // Provider chain unreachable, serve whatever the cache holds so the trend
+      // still renders offline (may be sparse, the caller forward-fills gaps).
+      if (err instanceof ServiceUnavailableException && cached.length > 0) {
+        this.logger.warn(
+          `FX series provider unavailable for ${base}->${quote}; serving ${cached.length} cached rows`,
+        );
+        return dedupe(cached);
+      }
+      throw err;
+    }
+  }
+
+  /** Shift an ISO date by `days` (may be negative), returning YYYY-MM-DD. */
+  private shiftISO(iso: string, days: number): string {
+    const d = toUtcDate(iso);
+    d.setUTCDate(d.getUTCDate() + days);
+    return dateToISO(d);
+  }
+
   // ── internals ─────────────────────────────────────────────────────────────
 
   /** Historical resolution with walk-back + primary/fallback provider chain. */

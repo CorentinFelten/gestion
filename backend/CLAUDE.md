@@ -21,7 +21,7 @@ Node 24 · **NestJS 11** · TypeScript · **Prisma 7** (engine-free; `pg` driver
 Shared infra: `src/common/`, `AuthGuard`, `HouseholdMemberGuard`, `RoleGuard`, `CsrfGuard`, `@CurrentUser()`, `@Roles()`, `ZodValidationPipe`, `AllExceptionsFilter`; `prisma/prisma.service.ts` (`@Global`).
 
 ## Contracts, keep stable (other code depends on these)
-- **`FxService`**: `getRate(from,to,dateISO)`, `convert(amount,from,to,dateISO)`, `getLatestRate(from,to)` → all return `{rate, rateDate, source}` (+`amount` for convert). Use `convert()` to freeze a payment-date rate; `getLatestRate()` only for net worth.
+- **`FxService`**: `getRate(from,to,dateISO)`, `convert(amount,from,to,dateISO)`, `getLatestRate(from,to)` → all return `{rate, rateDate, source}` (+`amount` for convert). Use `convert()` to freeze a payment-date rate; `getLatestRate()` only for live/current net worth. Also `getRateSeries(from,to,startISO,endISO)` → `{rate,rateDate,source}[]` (one per published business day, ascending; cache-first, one provider round-trip, forward-fill weekends in the caller) — used to value the **net-worth trend** at each day's own historical rate. Optional `RateProvider.getRateSeries` (Frankfurter time-series `/{start}..{end}`) backs it; erapi lacks it, so it degrades to `getLatestRate`.
 - **Guards** (import from `src/common`): put `AuthGuard` on everything authenticated; `HouseholdMemberGuard` on `/households/:id/*`; `RoleGuard` + `@Roles('owner','admin')` on **destructive membership actions only** (remove member, mint invite, revoke invite); **`CsrfGuard` on every POST/PATCH/DELETE**. Note: `PATCH /households/:id` (name + base currency) is intentionally member-level (no `RoleGuard`), any member may manage global settings.
 - **`PrismaService`** for all DB access.
 

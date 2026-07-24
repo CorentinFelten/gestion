@@ -23,6 +23,16 @@ export interface RateProvider {
 
   /** Latest available rate (used for net-worth current-value conversion). */
   getLatestRate(from: string, to: string): Promise<RateQuote>;
+
+  /**
+   * Optional: every published rate between `start` and `end` (inclusive, ISO
+   * YYYY-MM-DD), one `RateQuote` per published business day, in any order. Lets a
+   * caller value a historical DAILY series (e.g. the net-worth trend) at each
+   * day's own rate in a single round-trip instead of one call per day. Providers
+   * without a time-series endpoint leave this undefined; callers fall back to
+   * per-day `getRate`/`getLatestRate`.
+   */
+  getRateSeries?(from: string, to: string, start: string, end: string): Promise<RateQuote[]>;
 }
 
 /** DI token for the primary provider. */
