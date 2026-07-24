@@ -249,6 +249,7 @@ function makeService(fxOverrides: Partial<Record<string, jest.Mock>> = {}) {
     convert: jest.fn(),
     getRate: jest.fn(),
     getLatestRate: jest.fn(),
+    getRateSeries: jest.fn().mockResolvedValue([]),
     ...fxOverrides,
   };
   const service = new PersonalService(prisma as any, fx as any);
@@ -913,18 +914,114 @@ describe('PersonalService, net-worth snapshots', () => {
     expect(prisma.netWorthSnapshots).toHaveLength(1); // upserted, not duplicated
   });
 
-  it('returns history oldest-first and scoped to the owner', async () => {
+  it('derives a complete per-day series scoped to the owner', async () => {
     const { service, prisma } = makeService();
     seedUser(prisma, USER_A, 'EUR');
     seedUser(prisma, USER_B, 'EUR');
-    prisma.netWorthSnapshots.push(
-      { id: 's1', userId: USER_A, snapshotDate: new Date('2026-01-10'), currency: 'EUR', totalBase: '100' },
-      { id: 's2', userId: USER_A, snapshotDate: new Date('2026-02-10'), currency: 'EUR', totalBase: '250' },
-      { id: 's3', userId: USER_B, snapshotDate: new Date('2026-02-10'), currency: 'EUR', totalBase: '999' },
-    );
-    const hist = await service.getNetWorthHistory(USER_A, 100000);
-    expect(hist.points.map((p: any) => p.total)).toEqual(['100', '250']); // not B's 999
-    expect(hist.points[0].date).toBe('2026-01-10');
+
+    // Account created 6 days ago (so the series spans a fixed 7-day window) with a
+    // 1000 EUR opening balance; a +500 income lands 3 days ago.
+    const created = new Date(`${today}T00:00:00.000Z`);
+    created.setUTCDate(created.getUTCDate() - 6);
+    const acc = await service.createAccount(USER_A, {
+      name: 'Courant', type: 'checking', currency: 'EUR', openingBalance: '1000',
+    });
+    // Pin the account's creation day (fake defaults it to "now").
+    prisma.accounts.find((a) => a.id === acc.id)!.createdAt = created;
+
+    const incomeDay = new Date(`${today}T00:00:00.000Z`);
+    incomeDay.setUTCDate(incomeDay.getUTCDate() - 3);
+    const incomeISO = incomeDay.toISOString().slice(0, 10);
+    await service.createTransaction(USER_A, {
+      accountId: acc.id, type: 'income', amount: '500', txnDate: incomeISO,
+    });
+
+    // Noise for user B: must never leak into A's series.
+    const accB = await service.createAccount(USER_B, {
+      name: 'B', type: 'checking', currency: 'EUR', openingBalance: '999',
+    });
+    prisma.accounts.find((a) => a.id === accB.id)!.createdAt = created;
+
+    const hist = await service.getNetWorthHistory(USER_A);
+    // One point per calendar day, oldest first, no gaps.
+    expect(hist.points).toHaveLength(7);
+    expect(hist.points[0].date).toBe(created.toISOString().slice(0, 10));
+    expect(hist.points[hist.points.length - 1].date).toBe(today);
+    // 1000 before the income, 1500 on/after it — a real fluctuation, never B's 999.
+    expect(hist.points[0].total).toBe('1000');
+    const idx = hist.points.findIndex((p: any) => p.date === incomeISO);
+    expect(hist.points[idx - 1].total).toBe('1000');
+    expect(hist.points[idx].total).toBe('1500');
+    expect(hist.points[hist.points.length - 1].total).toBe('1500');
+  });
+
+  it('values each day at its OWN historical rate (not today\'s)', async () => {
+    // A USD account converted to an EUR profile: the USD→EUR rate rises from 0.90
+    // to 0.95 mid-window, so net worth must fluctuate from FX alone, no txns.
+    const created = new Date(`${today}T00:00:00.000Z`);
+    created.setUTCDate(created.getUTCDate() - 3);
+    const createdISO = created.toISOString().slice(0, 10);
+    const midISO = new Date(`${today}T00:00:00.000Z`);
+    midISO.setUTCDate(midISO.getUTCDate() - 1);
+    const jumpISO = midISO.toISOString().slice(0, 10);
+
+    const getRateSeries = jest.fn().mockResolvedValue([
+      { rate: new Decimal('0.90'), rateDate: createdISO, source: 'test' },
+      { rate: new Decimal('0.95'), rateDate: jumpISO, source: 'test' },
+    ]);
+    const { service, prisma } = makeService({ getRateSeries });
+    seedUser(prisma, USER_A, 'EUR');
+    const acc = await service.createAccount(USER_A, {
+      name: 'USD Savings', type: 'savings', currency: 'USD', openingBalance: '100',
+    });
+    prisma.accounts.find((a) => a.id === acc.id)!.createdAt = created;
+
+    const hist = await service.getNetWorthHistory(USER_A);
+    expect(hist.profileCurrency).toBe('EUR');
+    // 100 USD @ 0.90 = 90 until the rate jumps, then @ 0.95 = 95 — FX fluctuation.
+    expect(hist.points[0].total).toBe('90');
+    const jumpIdx = hist.points.findIndex((p: any) => p.date === jumpISO);
+    expect(hist.points[jumpIdx - 1].total).toBe('90');
+    expect(hist.points[jumpIdx].total).toBe('95');
+    expect(hist.points[hist.points.length - 1].total).toBe('95');
+    // One time-series round-trip for the whole span (never getLatestRate here).
+    expect(getRateSeries).toHaveBeenCalledTimes(1);
+  });
+
+  it('degrades to the latest rate when the historical series is unavailable', async () => {
+    const created = new Date(`${today}T00:00:00.000Z`);
+    created.setUTCDate(created.getUTCDate() - 2);
+    const getRateSeries = jest.fn().mockRejectedValue(new Error('provider down'));
+    const getLatestRate = jest
+      .fn()
+      .mockResolvedValue({ rate: new Decimal('0.80'), rateDate: today, source: 'test' });
+    const { service, prisma } = makeService({ getRateSeries, getLatestRate });
+    seedUser(prisma, USER_A, 'EUR');
+    const acc = await service.createAccount(USER_A, {
+      name: 'USD', type: 'savings', currency: 'USD', openingBalance: '100',
+    });
+    prisma.accounts.find((a) => a.id === acc.id)!.createdAt = created;
+
+    const hist = await service.getNetWorthHistory(USER_A);
+    // Flat 100 USD * 0.80 across every day (better a flat line than an empty chart).
+    expect(hist.points.every((p: any) => p.total === '80')).toBe(true);
+    expect(getLatestRate).toHaveBeenCalled();
+  });
+
+  it('caps the look-back window when `days` is given', async () => {
+    const { service, prisma } = makeService();
+    seedUser(prisma, USER_A, 'EUR');
+    const created = new Date(`${today}T00:00:00.000Z`);
+    created.setUTCDate(created.getUTCDate() - 365);
+    const acc = await service.createAccount(USER_A, {
+      name: 'Courant', type: 'checking', currency: 'EUR', openingBalance: '1000',
+    });
+    prisma.accounts.find((a) => a.id === acc.id)!.createdAt = created;
+
+    const hist = await service.getNetWorthHistory(USER_A, 7);
+    expect(hist.points).toHaveLength(8); // today − 7 … today, inclusive
+    // Pre-window opening balance is folded in → first point already reflects it.
+    expect(hist.points[0].total).toBe('1000');
   });
 });
 

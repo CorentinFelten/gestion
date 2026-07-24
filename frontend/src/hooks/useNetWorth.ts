@@ -20,15 +20,18 @@ export function useNetWorth() {
 }
 
 /**
- * Captured net-worth history (`/me/net-worth/history`), oldest-first, used to
- * plot the patrimoine-net trend. Snapshots accrue one row per day.
+ * Net-worth history (`/me/net-worth/history`), oldest-first, used to plot the
+ * patrimoine-net trend. The backend derives a COMPLETE per-day series from
+ * account creation onward (every day is filled, even those with no transaction /
+ * when the app wasn't running), so the graph shows a continuous evolution.
+ * `days`, when passed, caps the look-back window; omitted ⇒ full history.
  */
-export function useNetWorthHistory(days = 365) {
+export function useNetWorthHistory(days?: number) {
   return useQuery({
-    queryKey: meKeys.netWorthHistory(days),
+    queryKey: meKeys.netWorthHistory(days ?? 'all'),
     queryFn: async () => {
       const { data } = await api.get<NetWorthHistory>('/me/net-worth/history', {
-        params: { days },
+        params: days !== undefined ? { days } : undefined,
       });
       return data;
     },

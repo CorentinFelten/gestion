@@ -743,23 +743,212 @@ export class PersonalService {
     };
   }
 
-  /** Net-worth snapshots over the last `days` (owner-only), oldest first. */
-  async getNetWorthHistory(userId: string, days = 365): Promise<NetWorthHistoryDto> {
+  /**
+   * Net-worth trend as a COMPLETE per-day series (owner-only, oldest first).
+   *
+   * Rather than reading the sparse `net_worth_snapshots` table (which only accrues
+   * a row on days the app actually ran), the series is DERIVED: for every calendar
+   * day from the account's start through today, net worth = Σ over active accounts
+   * of (opening balance + every transaction up to that day), each converted to the
+   * profile currency at THAT DAY'S OWN historical rate (`buildDailyRates`), so the
+   * trend reflects real FX movement over time, not just balance changes. This
+   * backfills days with no transaction / when the app wasn't started, so the graph
+   * shows a continuous evolution. (The live `getNetWorth` still uses the latest
+   * rate for today's current value, §3.4.)
+   *
+   * @param days optional look-back cap in days; omitted ⇒ full history from the
+   *   first account's start. A hard 10-year ceiling always bounds the span.
+   */
+  async getNetWorthHistory(userId: string, days?: number): Promise<NetWorthHistoryDto> {
     const profileCurrency = await this.getProfileCurrency(userId);
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - Math.max(1, days));
-    const rows = await this.prisma.netWorthSnapshot.findMany({
-      where: { userId, snapshotDate: { gte: toUtcDate(dateToISO(since)) } },
-      orderBy: { snapshotDate: 'asc' },
+
+    const accounts = await this.prisma.account.findMany({
+      where: { userId, isActive: true },
+      select: { id: true, currency: true, openingBalance: true, createdAt: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
-    return {
-      profileCurrency,
-      points: rows.map((r) => ({
-        date: dateToISO(r.snapshotDate),
-        currency: r.currency,
-        total: this.dec(r.totalBase).toString(),
-      })),
+    if (accounts.length === 0) {
+      return { profileCurrency, points: [] };
+    }
+
+    const rows = await this.prisma.personalTransaction.findMany({
+      where: { userId, deletedAt: null },
+      select: { ...BALANCE_ROW_SELECT, txnDate: true },
+    });
+
+    const activeIds = new Set(accounts.map((a) => a.id));
+
+    // Signed, per-day, per-account balance deltas (native currency), and the
+    // earliest day any transaction touches each account.
+    const deltaByDay = new Map<string, Map<string, Decimal>>();
+    const firstTxnDay = new Map<string, string>();
+    const addDelta = (day: string, accountId: string, delta: Decimal) => {
+      let perAcct = deltaByDay.get(day);
+      if (!perAcct) {
+        perAcct = new Map();
+        deltaByDay.set(day, perAcct);
+      }
+      perAcct.set(accountId, (perAcct.get(accountId) ?? new Decimal(0)).plus(delta));
+      const prev = firstTxnDay.get(accountId);
+      if (prev === undefined || day < prev) firstTxnDay.set(accountId, day);
     };
+    for (const r of rows) {
+      const day = dateToISO(r.txnDate);
+      if (r.type === 'income' && activeIds.has(r.accountId)) {
+        addDelta(day, r.accountId, this.dec(r.amount));
+      } else if (r.type === 'expense' && activeIds.has(r.accountId)) {
+        addDelta(day, r.accountId, this.dec(r.amount).negated());
+      } else if (r.type === 'transfer') {
+        if (activeIds.has(r.accountId)) {
+          addDelta(day, r.accountId, this.dec(r.amount).negated()); // leg out
+        }
+        if (r.transferAccountId && activeIds.has(r.transferAccountId)) {
+          const credit = r.transferAmount !== null ? this.dec(r.transferAmount) : this.dec(r.amount);
+          addDelta(day, r.transferAccountId, credit); // leg in
+        }
+      }
+    }
+
+    // Each account starts contributing on the earlier of its creation day and its
+    // first transaction (so a back-dated transaction still shows up).
+    const activeFrom = new Map<string, string>();
+    for (const a of accounts) {
+      const created = dateToISO(a.createdAt);
+      const firstTx = firstTxnDay.get(a.id);
+      activeFrom.set(a.id, firstTx !== undefined && firstTx < created ? firstTx : created);
+    }
+
+    const today = todayISO();
+    const floorISO = (back: number) => {
+      const d = new Date(`${today}T00:00:00.000Z`);
+      d.setUTCDate(d.getUTCDate() - back);
+      return d.toISOString().slice(0, 10);
+    };
+    // Series start: earliest account activity, capped by `days` (if given) and by a
+    // hard 10-year ceiling so the walk stays bounded regardless of account age.
+    let start = [...activeFrom.values()].reduce((min, d) => (d < min ? d : min), today);
+    const hardFloor = floorISO(3650);
+    if (start < hardFloor) start = hardFloor;
+    if (days !== undefined && Number.isFinite(days) && days > 0) {
+      const windowFloor = floorISO(Math.floor(days));
+      if (start < windowFloor) start = windowFloor;
+    }
+
+    // Materialize the calendar days [start, today] once (used for both the FX
+    // series lookup and the balance walk).
+    const dayISOs: string[] = [];
+    {
+      const cursor = new Date(`${start}T00:00:00.000Z`);
+      const end = new Date(`${today}T00:00:00.000Z`);
+      while (cursor.getTime() <= end.getTime()) {
+        dayISOs.push(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+
+    // Per-day FX: each foreign currency is converted at THAT day's own historical
+    // rate (not today's), so the trend reflects real FX movement, not just
+    // balance changes. `buildDailyRates` fetches the whole span in one request and
+    // forward-fills weekends/holidays.
+    const foreignCurrencies = [
+      ...new Set(accounts.map((a) => a.currency).filter((c) => c !== profileCurrency)),
+    ];
+    const rateMapByCurrency = new Map<string, Map<string, Decimal>>();
+    for (const currency of foreignCurrencies) {
+      rateMapByCurrency.set(
+        currency,
+        await this.buildDailyRates(currency, profileCurrency, start, today, dayISOs),
+      );
+    }
+    const rateOf = (currency: string, day: string): Decimal =>
+      currency === profileCurrency
+        ? new Decimal(1)
+        : rateMapByCurrency.get(currency)?.get(day) ?? new Decimal(1);
+
+    // Running native balances, seeded from opening balances and pre-rolled with
+    // every delta strictly before `start` so the first emitted point is correct.
+    const balances = new Map<string, Decimal>();
+    for (const a of accounts) balances.set(a.id, this.dec(a.openingBalance));
+    for (const [day, perAcct] of deltaByDay) {
+      if (day >= start) continue;
+      for (const [accountId, delta] of perAcct) {
+        balances.set(accountId, (balances.get(accountId) ?? new Decimal(0)).plus(delta));
+      }
+    }
+
+    // Walk each calendar day, apply that day's deltas, sum the profile-currency
+    // total over accounts that have come into existence by then, at that day's FX.
+    const points: NetWorthSnapshotDto[] = [];
+    for (const day of dayISOs) {
+      const perAcct = deltaByDay.get(day);
+      if (perAcct) {
+        for (const [accountId, delta] of perAcct) {
+          balances.set(accountId, (balances.get(accountId) ?? new Decimal(0)).plus(delta));
+        }
+      }
+      let total = new Decimal(0);
+      for (const a of accounts) {
+        if (day < (activeFrom.get(a.id) as string)) continue;
+        total = total.plus((balances.get(a.id) as Decimal).mul(rateOf(a.currency, day)).toDecimalPlaces(6));
+      }
+      points.push({
+        date: day,
+        currency: profileCurrency,
+        total: total.toDecimalPlaces(6).toString(),
+      });
+    }
+
+    return { profileCurrency, points };
+  }
+
+  /**
+   * A day→rate map (native `currency` → `profile`) covering `dayISOs`, using each
+   * day's OWN historical rate. Fetches the whole span in a single provider
+   * round-trip via `FxService.getRateSeries`, then forward-fills weekends /
+   * holidays / uncovered days from the nearest prior published rate. If the
+   * historical series is unavailable (offline / provider without time-series /
+   * unsupported currency), degrades to the latest rate applied flat across all
+   * days so the trend still renders.
+   */
+  private async buildDailyRates(
+    currency: string,
+    profile: string,
+    startISO: string,
+    endISO: string,
+    dayISOs: string[],
+  ): Promise<Map<string, Decimal>> {
+    const map = new Map<string, Decimal>();
+    // Query a little before the start so the first days have a prior anchor rate.
+    const anchor = new Date(`${startISO}T00:00:00.000Z`);
+    anchor.setUTCDate(anchor.getUTCDate() - 10);
+    const anchorISO = anchor.toISOString().slice(0, 10);
+
+    let published: { rateDate: string; rate: Decimal }[] = [];
+    try {
+      const series = await this.fx.getRateSeries(currency, profile, anchorISO, endISO);
+      published = series
+        .map((s) => ({ rateDate: s.rateDate, rate: s.rate }))
+        .sort((a, b) => (a.rateDate < b.rateDate ? -1 : a.rateDate > b.rateDate ? 1 : 0));
+      if (published.length === 0) throw new Error('empty FX series');
+    } catch {
+      // Degrade: one latest rate for every day (better a flat line than none).
+      const latest = await this.fx.getLatestRate(currency, profile).catch(() => null);
+      const flat = latest?.rate ?? new Decimal(1);
+      for (const day of dayISOs) map.set(day, flat);
+      return map;
+    }
+
+    // Forward-fill: for each day use the most recent published rate at/before it.
+    let idx = 0;
+    let last = published[0].rate;
+    for (const day of dayISOs) {
+      while (idx < published.length && published[idx].rateDate <= day) {
+        last = published[idx].rate;
+        idx++;
+      }
+      map.set(day, last);
+    }
+    return map;
   }
 
   // ── Saved filters (#8) ──────────────────────────────────────────────────────

@@ -131,13 +131,14 @@ export default function MoneyStatsPage() {
 }
 
 /**
- * Real patrimoine-net trend from captured daily snapshots. On mount we POST one
- * snapshot (idempotent, one row/day) so a fresh user always sees at least
- * today's point rather than an empty chart.
+ * Patrimoine-net trend: a complete per-day series the backend derives from the
+ * ledger (account creation → today, every day filled), so the chart shows a
+ * continuous evolution. On mount we still POST today's snapshot (idempotent, one
+ * row/day) to keep the recorded-snapshot history current.
  */
 function NetWorthHistorySection({ currency }: { currency: string }) {
   const { t } = useT();
-  const history = useNetWorthHistory(365);
+  const history = useNetWorthHistory();
   const snapshot = useCaptureSnapshot();
   const captured = useRef(false);
 

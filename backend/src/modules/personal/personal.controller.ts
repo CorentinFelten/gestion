@@ -132,8 +132,11 @@ export class PersonalController {
     @CurrentUser('id') userId: string,
     @Query('days') days?: string,
   ) {
+    // Omitted/invalid `days` ⇒ full history from account creation (undefined);
+    // a positive value caps the look-back window (hard 10-year ceiling applies).
     const parsed = Number(days);
-    const window = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 3650) : 365;
+    const window =
+      days !== undefined && Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 3650) : undefined;
     return this.personal.getNetWorthHistory(userId, window);
   }
 

@@ -19,7 +19,7 @@ export const meKeys = {
   accounts: ['me', 'accounts'] as const,
   accountBalance: (id: string) => ['me', 'accounts', id, 'balance'] as const,
   netWorth: ['me', 'net-worth'] as const,
-  netWorthHistory: (days: number) => ['me', 'net-worth', 'history', days] as const,
+  netWorthHistory: (days: number | string) => ['me', 'net-worth', 'history', days] as const,
   payoff: (id: string, monthlyPayment: string) =>
     ['me', 'accounts', id, 'payoff', monthlyPayment] as const,
   savedFilters: ['me', 'saved-filters'] as const,
